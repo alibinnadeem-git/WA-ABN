@@ -96,10 +96,10 @@ async function refresh(){
  ["Leads",s.leads.total],["Hot",s.leads.hot],["Warm",s.leads.warm],
  ["Processed",c.messagesProcessed],["Rejected",c.senderRejected],["Rate limited",c.rateLimited],
  ["Pending",s.runtime.pendingLeads],["Event",s.runtime.currentEvent||"None"]
- ].map(([k,v])=>`<div class="card"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join("");
- document.getElementById("audit").innerHTML="<table><tr><th>Time</th><th>Event</th><th>Details</th></tr>"+a.map(x=>`<tr><td>${esc(x.ts)}</td><td>${esc(x.event)}</td><td><pre>${esc(JSON.stringify(x,null,2))}</pre></td></tr>`).join("")+"</table>";
+ ].map(([k,v])=>"<div class=\"card\"><div class=\"k\">"+esc(k)+"</div><div class=\"v\">"+esc(v)+"</div></div>").join("");
+ document.getElementById("audit").innerHTML="<table><tr><th>Time</th><th>Event</th><th>Details</th></tr>"+a.map(x=>"<tr><td>"+esc(x.ts)+"</td><td>"+esc(x.event)+"</td><td><pre>"+esc(JSON.stringify(x,null,2))+"</pre></td></tr>").join("")+"</table>";
 }
-let t;document.getElementById("q").addEventListener("input",e=>{clearTimeout(t);t=setTimeout(async()=>{const q=e.target.value.trim();if(!q){document.getElementById("leads").innerHTML="";return}const rows=await get("/api/leads?q="+encodeURIComponent(q));document.getElementById("leads").innerHTML="<table><tr><th>Name</th><th>Company</th><th>Priority</th><th>Status</th><th>Captured</th></tr>"+rows.map(r=>`<tr><td>${esc(r["Full Name"])}</td><td>${esc(r.Company)}</td><td>${esc(r.Priority)}</td><td>${esc(r.Status)}</td><td>${esc(r["Captured At"])}</td></tr>`).join("")+"</table>"},250)});
+let t;document.getElementById("q").addEventListener("input",e=>{clearTimeout(t);t=setTimeout(async()=>{const q=e.target.value.trim();if(!q){document.getElementById("leads").innerHTML="";return}const rows=await get("/api/leads?q="+encodeURIComponent(q));document.getElementById("leads").innerHTML="<table><tr><th>Name</th><th>Company</th><th>Priority</th><th>Status</th><th>Captured</th></tr>"+rows.map(r=>"<tr><td>"+esc(r["Full Name"])+"</td><td>"+esc(r.Company)+"</td><td>"+esc(r.Priority)+"</td><td>"+esc(r.Status)+"</td><td>"+esc(r["Captured At"])+"</td></tr>").join("")+"</table>"},250)});
 refresh();setInterval(refresh,15000);
 </script></body></html>`;
 
