@@ -2,23 +2,25 @@ import makeWASocket, {
   Browsers,
   DisconnectReason,
   downloadMediaMessage,
-  fetchLatestBaileysVersion,
   normalizeMessageContent,
-  useMultiFileAuthState,
   type WAMessage,
   type WASocket,
 } from "baileys";
 import pino from "pino";
 import qrcode from "qrcode-terminal";
 import { config } from "./config.js";
+import { audit } from "./audit.js";
+import { useEncryptedAuthState } from "./auth-state.js";
 import { handleMessage, type Chat, type IncomingMessage } from "./leads.js";
 import type { MessageInput } from "./ai.js";
 import { ensureSheet } from "./sheets.js";
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? "warn" });
-const seen = new Set<string>(); // WhatsApp can redeliver; process each message once
+const seen = new Set<string>();
 const announcedGroups = new Set<string>();
-const recent = new Map<string, WAMessage>(); // recent group messages, for quoting/reacting later
+const recent = new Map<string, WAMessage>();
+const senderWindows = new Map<string, number[]>();
+let reconnectTimer: NodeJS.Timeout | null = null;
 
 function remember(m: WAMessage): void {
   recent.set(m.key.id!, m);
@@ -40,37 +42,55 @@ function makeChat(sock: WASocket, jid: string): Chat {
   };
 }
 
+function senderAllowed(sender: string): boolean {
+  return config.allowedSenderJids.size === 0 || config.allowedSenderJids.has(sender);
+}
+
+function rateLimited(sender: string): boolean {
+  const now = Date.now();
+  const cutoff = now - 60_000;
+  const recentTimes = (senderWindows.get(sender) ?? []).filter((t) => t > cutoff);
+  if (recentTimes.length >= config.maxMessagesPerMinute) {
+    senderWindows.set(sender, recentTimes);
+    return true;
+  }
+  recentTimes.push(now);
+  senderWindows.set(sender, recentTimes);
+  return false;
+}
+
 const SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 type ImageType = (typeof SUPPORTED_IMAGE_TYPES)[number];
 
 async function start(): Promise<void> {
-  const { state, saveCreds } = await useMultiFileAuthState(config.authDir);
-  const { version } = await fetchLatestBaileysVersion();
+  const { state, saveCreds } = await useEncryptedAuthState(config.authDir, config.authEncryptionKey);
 
   const sock = makeWASocket({
-    version,
     auth: state,
     logger,
     browser: Browsers.macOS("Desktop"),
     markOnlineOnConnect: false,
+    syncFullHistory: false,
   });
 
   sock.ev.on("creds.update", saveCreds);
 
   if (config.pairingNumber && !sock.authState.creds.registered) {
-    // Pair by code instead of QR (handy on a headless server).
     setTimeout(async () => {
       const code = await sock.requestPairingCode(config.pairingNumber!.replace(/\D/g, ""));
+      audit("whatsapp.pairing_code_issued");
       console.log(`\nWhatsApp → Linked devices → Link with phone number → enter code: ${code}\n`);
     }, 3000);
   }
 
   sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
     if (qr && !config.pairingNumber) {
+      audit("whatsapp.qr_issued");
       console.log("Scan this QR with the bot's WhatsApp (Linked devices → Link a device):");
       qrcode.generate(qr, { small: true });
     }
     if (connection === "open") {
+      audit("whatsapp.connected");
       console.log("✅ Connected to WhatsApp.");
       if (!config.groupJid) {
         console.log("WA_GROUP_JID is not set. Send any message in the leads group and its id will be printed here.");
@@ -78,12 +98,18 @@ async function start(): Promise<void> {
     }
     if (connection === "close") {
       const status = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
+      audit("whatsapp.disconnected", { status: status ?? null });
       if (status === DisconnectReason.loggedOut) {
         console.error(`Logged out. Delete ${config.authDir} and restart to link again.`);
         process.exit(1);
       }
-      console.warn(`Connection closed (${status ?? "unknown"}), reconnecting…`);
-      setTimeout(() => void start(), 2000);
+      if (!reconnectTimer) {
+        console.warn(`Connection closed (${status ?? "unknown"}), reconnecting…`);
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          void start();
+        }, 2000);
+      }
     }
   });
 
@@ -94,6 +120,7 @@ async function start(): Promise<void> {
         await onMessage(sock, m);
       } catch (err) {
         console.error("Failed to handle message", err);
+        audit("message.handler_error", { message: err instanceof Error ? err.message : "unknown" });
       }
     }
   });
@@ -113,8 +140,20 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
     return;
   }
   if (jid !== config.groupJid) return;
+
+  const sender = m.key.participant ?? jid;
+  if (!senderAllowed(sender)) {
+    audit("message.sender_rejected", { sender, group: jid });
+    return;
+  }
+  if (rateLimited(sender)) {
+    audit("message.rate_limited", { sender, group: jid });
+    return;
+  }
+
   if (seen.has(id)) return;
   seen.add(id);
+  if (seen.size > 10_000) seen.clear();
   remember(m);
 
   const content = normalizeMessageContent(m.message);
@@ -136,7 +175,18 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
     input.text = media.caption ?? null;
     const mime = (media.mimetype ?? "image/jpeg").split(";")[0] as ImageType;
     if (SUPPORTED_IMAGE_TYPES.includes(mime)) {
+      const declaredSize = Number(media.fileLength ?? 0);
+      if (declaredSize > config.maxImageBytes) {
+        audit("message.media_rejected_size", { sender, bytes: declaredSize });
+        await sock.sendMessage(jid, { text: "⚠️ Image is too large for the secure processing limit." }, { quoted: m });
+        return;
+      }
       const data = await downloadMediaMessage(m, "buffer", {}, { logger, reuploadRequest: sock.updateMediaMessage });
+      if (data.length > config.maxImageBytes) {
+        audit("message.media_rejected_size", { sender, bytes: data.length });
+        await sock.sendMessage(jid, { text: "⚠️ Image is too large for the secure processing limit." }, { quoted: m });
+        return;
+      }
       input.images.push({ data, mediaType: mime });
     }
   }
@@ -150,7 +200,7 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
 
   const incoming: IncomingMessage = {
     id,
-    senderId: m.key.participant ?? jid,
+    senderId: sender,
     senderName: m.pushName ?? "Teammate",
     input,
     quotedId,
@@ -158,6 +208,10 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
   await handleMessage(incoming, makeChat(sock, jid));
 }
 
+audit("process.start", {
+  groupConfigured: Boolean(config.groupJid),
+  senderAllowlistConfigured: config.allowedSenderJids.size > 0,
+});
 await ensureSheet();
 console.log(`📄 Google Sheet ready (tab "${config.sheetTab}").`);
 await start();

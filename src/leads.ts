@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { enrichLead, extractLeads, type Extraction, type Lead, type MessageInput } from "./ai.js";
 import { config } from "./config.js";
+import { audit } from "./audit.js";
 import { appendLead, appendNoteToRow, findDuplicate, rowLink } from "./sheets.js";
 
 /** What the WhatsApp layer hands us for each group message. */
@@ -252,6 +253,7 @@ async function handleCommand(text: string, msg: IncomingMessage, chat: Chat): Pr
       }
       state.event = /^(off|clear|none)$/i.test(arg) ? null : arg;
       saveState();
+      audit("command.event_changed", { sender: msg.senderId, event: state.event });
       await chat.reply(state.event ? `📍 New leads will be tagged *${state.event}*.` : "📍 Event tag cleared.", msg.id);
       break;
     case "status":
