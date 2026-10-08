@@ -14,11 +14,12 @@ import { useEncryptedAuthState } from "./auth-state.js";
 import { handleMessage, type Chat, type IncomingMessage } from "./leads.js";
 import type { MessageInput } from "./ai.js";
 import { ensureSheet } from "./sheets.js";
-import { increment, setConnection } from "./ops.js";
+import { increment, setConnection, setGroupInfo, setPairingState } from "./ops.js";
 import { startOpsDashboard } from "./dashboard.js";
 import { handlePlatformCommand } from "./commands.js";
 import { recordHistory } from "./history.js";
 import { startScheduler } from "./scheduler.js";
+import { startAutoDigest } from "./digests.js";
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? "warn" });
 const seen = new Set<string>();
@@ -80,9 +81,9 @@ async function start(): Promise<void> {
 
   sock.ev.on("creds.update", saveCreds);
 
-  startScheduler(async (jid, message) => {
-    await sock.sendMessage(jid, { text: message });
-  });
+  const sendText = async (jid: string, message: string) => { await sock.sendMessage(jid, { text: message }); };
+  startScheduler(sendText);
+  startAutoDigest(sendText);
 
   if (config.features.receipts) {
     sock.ev.on("messages.update", (updates) => {
@@ -100,6 +101,7 @@ async function start(): Promise<void> {
   if (config.pairingNumber && !sock.authState.creds.registered) {
     setTimeout(async () => {
       const code = await sock.requestPairingCode(config.pairingNumber!.replace(/\D/g, ""));
+      setPairingState("code-issued");
       audit("whatsapp.pairing_code_issued");
       console.log(`\nWhatsApp → Linked devices → Link with phone number → enter code: ${code}\n`);
     }, 3000);
@@ -107,13 +109,20 @@ async function start(): Promise<void> {
 
   sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
     if (qr && !config.pairingNumber) {
+      setPairingState("required");
       audit("whatsapp.qr_issued");
       console.log("Scan this QR with the bot's WhatsApp (Linked devices → Link a device):");
       qrcode.generate(qr, { small: true });
     }
     if (connection === "open") {
       setConnection("connected");
+      setPairingState("idle");
       audit("whatsapp.connected");
+      for (const groupJid of config.allowedGroupJids) {
+        void sock.groupMetadata(groupJid).then((meta) => {
+          setGroupInfo(groupJid, { subject: meta.subject ?? groupJid, participants: meta.participants.length, admins: meta.participants.filter((p) => Boolean(p.admin)).length });
+        }).catch(() => {});
+      }
       console.log("✅ Connected to WhatsApp.");
       if (config.allowedGroupJids.size === 0) {
         console.log("No WhatsApp groups are authorized yet. Send a message in a candidate group to print its JID, then configure WA_ALLOWED_GROUP_JIDS.");
@@ -161,6 +170,7 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
     if (!announcedGroups.has(jid)) {
       announcedGroups.add(jid);
       const meta = await sock.groupMetadata(jid).catch(() => null);
+      if (meta) setGroupInfo(jid, { subject: meta.subject ?? jid, participants: meta.participants.length, admins: meta.participants.filter((p) => Boolean(p.admin)).length });
       console.log(`Group "${meta?.subject ?? "?"}" → add ${jid} to WA_ALLOWED_GROUP_JIDS`);
     }
     return;
