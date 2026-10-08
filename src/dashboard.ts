@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { config } from "./config.js";
 import { opsSnapshot, prometheusMetrics } from "./ops.js";
-import { leadSummary, pipelineSummary, searchLeads } from "./sheets.js";
+import { exportLeadsCsv, followupAging, leadSummary, listLeads, pipelineSummary, searchLeads } from "./sheets.js";
 import { historyStats, searchHistory } from "./history.js";
 import { listReminders } from "./scheduler.js";
 import { listBackups } from "./backup.js";
@@ -138,7 +138,7 @@ export function startOpsDashboard(): void {
         return;
       }
       if (url.pathname === "/api/status") {
-        json(res, { app: { id: config.appId, name: config.appName, profile: config.profile, sessionId: config.sessionId }, runtime: opsSnapshot(), features: config.features, leads: config.features.leadCrm ? await leadSummary() : null, pipeline: config.features.leadCrm && config.features.pipeline ? await pipelineSummary() : null, history: historyStats(), reminders: listReminders().length, retries: config.features.retryQueue ? listRetries().length : 0, backups: config.features.backups ? listBackups().length : 0 });
+        json(res, { app: { id: config.appId, name: config.appName, profile: config.profile, sessionId: config.sessionId }, runtime: opsSnapshot(), features: config.features, leads: config.features.leadCrm ? await leadSummary() : null, pipeline: config.features.leadCrm && config.features.pipeline ? await pipelineSummary() : null, followups: config.features.leadCrm && config.features.pipeline ? await followupAging() : null, history: historyStats(), reminders: listReminders().length, retries: config.features.retryQueue ? listRetries().length : 0, backups: config.features.backups ? listBackups().length : 0 });
         return;
       }
       if (url.pathname === "/api/audit") {
@@ -149,6 +149,31 @@ export function startOpsDashboard(): void {
       if (url.pathname === "/api/leads") {
         const query = (url.searchParams.get("q") ?? "").trim();
         json(res, config.features.leadCrm && query ? await searchLeads(query, 50) : []);
+        return;
+      }
+      if (url.pathname === "/api/crm/leads") {
+        if (!config.features.leadCrm) { json(res, []); return; }
+        const filters = {
+          q: url.searchParams.get("q") ?? undefined,
+          priority: url.searchParams.get("priority") ?? undefined,
+          status: url.searchParams.get("status") ?? undefined,
+          stage: url.searchParams.get("stage") ?? undefined,
+          owner: url.searchParams.get("owner") ?? undefined,
+          event: url.searchParams.get("event") ?? undefined,
+        };
+        json(res, await listLeads(filters, Number(url.searchParams.get("limit") ?? 200)));
+        return;
+      }
+      if (url.pathname === "/api/export/leads.csv") {
+        if (!config.features.leadCrm || !config.features.exports) { json(res, { error: "disabled" }, 404); return; }
+        const csv = await exportLeadsCsv();
+        res.writeHead(200, {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": 'attachment; filename="wa-abn-leads.csv"',
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        });
+        res.end(csv);
         return;
       }
       if (url.pathname === "/api/search") {
