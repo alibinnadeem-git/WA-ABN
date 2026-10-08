@@ -39,7 +39,7 @@ function aad(file: string): Buffer {
 
 function encryptJson(value: unknown, key: Buffer, file: string): string {
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const cipher = createCipheriv("aes-256-gcm", key, iv, { authTagLength: 16 });
   cipher.setAAD(aad(file));
   const plaintext = Buffer.from(JSON.stringify(value, BufferJSON.replacer), "utf8");
   const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
@@ -68,7 +68,7 @@ function decryptOrParse(raw: string, key: Buffer, file: string): { value: unknow
     return { value: JSON.parse(raw, BufferJSON.reviver), encrypted: false };
   }
 
-  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(parsed.iv, "base64"));
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(parsed.iv, "base64"), { authTagLength: 16 });
   decipher.setAAD(aad(file));
   decipher.setAuthTag(Buffer.from(parsed.tag, "base64"));
   const plaintext = Buffer.concat([
