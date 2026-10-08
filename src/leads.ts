@@ -252,6 +252,7 @@ async function handleCommand(text: string, msg: IncomingMessage, chat: Chat): Pr
       }
       state.event = /^(off|clear|none)$/i.test(arg) ? null : arg;
       saveState();
+      audit("command.event_changed", { sender: msg.senderId, event: state.event });
       await chat.reply(state.event ? `📍 New leads will be tagged *${state.event}*.` : "📍 Event tag cleared.", msg.id);
       break;
     case "status":
