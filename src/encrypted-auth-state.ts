@@ -165,11 +165,11 @@ export async function useEncryptedMultiFileAuthState(
           const data: { [id: string]: SignalDataTypeMap[typeof type] } = {};
           await Promise.all(
             ids.map(async (id) => {
-              let value = (await readData(`${type}-${id}.json`)) as SignalDataTypeMap[typeof type] | null;
+              let value: any = await readData(`${type}-${id}.json`);
               if (type === "app-state-sync-key" && value) {
                 value = proto.Message.AppStateSyncKeyData.fromObject(value);
               }
-              data[id] = value as SignalDataTypeMap[typeof type];
+              data[id] = value;
             }),
           );
           return data;
