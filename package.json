@@ -1,20 +1,21 @@
 {
   "name": "stratum-leads-bot",
   "version": "1.0.0",
-  "description": "",
+  "description": "Hardened WhatsApp to Google Sheets lead capture bot",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npm run typecheck",
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
     "start": "node --env-file-if-exists=.env dist/index.js",
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "security:audit": "npm audit --audit-level=high"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alibinnadeem-git/WA-ABN.git"
   },
-  "keywords": [],
+  "keywords": ["whatsapp", "baileys", "security", "lead-capture"],
   "author": "",
   "license": "ISC",
   "type": "module",
