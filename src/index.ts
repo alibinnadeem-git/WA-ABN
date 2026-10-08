@@ -14,8 +14,12 @@ import { useEncryptedAuthState } from "./auth-state.js";
 import { handleMessage, type Chat, type IncomingMessage } from "./leads.js";
 import type { MessageInput } from "./ai.js";
 import { ensureSheet } from "./sheets.js";
-import { increment, setConnection } from "./ops.js";
+import { increment, setConnection, setGroupInfo, setPairingState } from "./ops.js";
 import { startOpsDashboard } from "./dashboard.js";
+import { handlePlatformCommand } from "./commands.js";
+import { recordHistory } from "./history.js";
+import { startScheduler } from "./scheduler.js";
+import { startAutoDigest } from "./digests.js";
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? "warn" });
 const seen = new Set<string>();
@@ -77,9 +81,27 @@ async function start(): Promise<void> {
 
   sock.ev.on("creds.update", saveCreds);
 
+  const sendText = async (jid: string, message: string) => { await sock.sendMessage(jid, { text: message }); };
+  startScheduler(sendText);
+  startAutoDigest(sendText);
+
+  if (config.features.receipts) {
+    sock.ev.on("messages.update", (updates) => {
+      for (const item of updates) {
+        const status = item.update.status;
+        const id = item.key.id;
+        const jid = item.key.remoteJid;
+        if (status != null && id && jid) {
+          recordHistory({ ts: new Date().toISOString(), id, jid, sender: "system", type: "receipt", status: String(status) });
+        }
+      }
+    });
+  }
+
   if (config.pairingNumber && !sock.authState.creds.registered) {
     setTimeout(async () => {
       const code = await sock.requestPairingCode(config.pairingNumber!.replace(/\D/g, ""));
+      setPairingState("code-issued");
       audit("whatsapp.pairing_code_issued");
       console.log(`\nWhatsApp → Linked devices → Link with phone number → enter code: ${code}\n`);
     }, 3000);
@@ -87,16 +109,23 @@ async function start(): Promise<void> {
 
   sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
     if (qr && !config.pairingNumber) {
+      setPairingState("required");
       audit("whatsapp.qr_issued");
       console.log("Scan this QR with the bot's WhatsApp (Linked devices → Link a device):");
       qrcode.generate(qr, { small: true });
     }
     if (connection === "open") {
       setConnection("connected");
+      setPairingState("idle");
       audit("whatsapp.connected");
+      for (const groupJid of config.allowedGroupJids) {
+        void sock.groupMetadata(groupJid).then((meta) => {
+          setGroupInfo(groupJid, { subject: meta.subject ?? groupJid, participants: meta.participants.length, admins: meta.participants.filter((p) => Boolean(p.admin)).length });
+        }).catch(() => {});
+      }
       console.log("✅ Connected to WhatsApp.");
-      if (!config.groupJid) {
-        console.log("WA_GROUP_JID is not set. Send any message in the leads group and its id will be printed here.");
+      if (config.allowedGroupJids.size === 0) {
+        console.log("No WhatsApp groups are authorized yet. Send a message in a candidate group to print its JID, then configure WA_ALLOWED_GROUP_JIDS.");
       }
     }
     if (connection === "close") {
@@ -137,15 +166,16 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
   const id = m.key.id;
   if (!jid?.endsWith("@g.us") || !id || m.key.fromMe || !m.message) return;
 
-  if (!config.groupJid) {
+  if (config.allowedGroupJids.size === 0) {
     if (!announcedGroups.has(jid)) {
       announcedGroups.add(jid);
       const meta = await sock.groupMetadata(jid).catch(() => null);
-      console.log(`Group "${meta?.subject ?? "?"}" → WA_GROUP_JID=${jid}`);
+      if (meta) setGroupInfo(jid, { subject: meta.subject ?? jid, participants: meta.participants.length, admins: meta.participants.filter((p) => Boolean(p.admin)).length });
+      console.log(`Group "${meta?.subject ?? "?"}" → add ${jid} to WA_ALLOWED_GROUP_JIDS`);
     }
     return;
   }
-  if (jid !== config.groupJid) return;
+  if (!config.allowedGroupJids.has(jid)) return;
 
   const sender = m.key.participant ?? jid;
   if (!senderAllowed(sender)) {
@@ -208,6 +238,31 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
 
   if (!input.text && !input.images.length && !input.vcards.length) return;
 
+  recordHistory({
+    ts: new Date().toISOString(),
+    id,
+    jid,
+    sender,
+    senderName: m.pushName ?? "Teammate",
+    type: "message",
+    text: input.text ?? undefined,
+    hasMedia: input.images.length > 0 || input.vcards.length > 0,
+  });
+
+  if (input.text) {
+    const handled = await handlePlatformCommand({
+      sock,
+      message: m,
+      jid,
+      sender,
+      senderName: m.pushName ?? "Teammate",
+      text: input.text,
+    });
+    if (handled) return;
+  }
+
+  if (!config.features.leadCrm) return;
+
   const incoming: IncomingMessage = {
     id,
     senderId: sender,
@@ -220,10 +275,12 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
 }
 
 audit("process.start", {
-  groupConfigured: Boolean(config.groupJid),
+  groupConfigured: config.allowedGroupJids.size > 0,
   senderAllowlistConfigured: config.allowedSenderJids.size > 0,
 });
 startOpsDashboard();
-await ensureSheet();
-console.log(`📄 Google Sheet ready (tab "${config.sheetTab}").`);
+if (config.features.leadCrm) {
+  await ensureSheet();
+  console.log(`📄 CRM backend ready (Google Sheet tab "${config.sheetTab}").`);
+}
 await start();

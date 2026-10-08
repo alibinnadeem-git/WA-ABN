@@ -7,6 +7,11 @@ function required(name: string): string {
   return value;
 }
 
+function optional(name: string): string | null {
+  const value = process.env[name]?.trim();
+  return value ? value : null;
+}
+
 function parseAuthKey(raw: string): Buffer {
   const value = raw.trim();
   const decoded = /^[0-9a-fA-F]{64}$/.test(value)
@@ -16,13 +21,6 @@ function parseAuthKey(raw: string): Buffer {
     throw new Error("WA_AUTH_ENCRYPTION_KEY must be a 32-byte key encoded as base64 or 64 hex characters");
   }
   return decoded;
-}
-
-function loadServiceAccount(): Record<string, string> {
-  const raw = required("GOOGLE_SERVICE_ACCOUNT_JSON").trim();
-  if (raw.startsWith("{")) return JSON.parse(raw);
-  if (fs.existsSync(raw)) return JSON.parse(fs.readFileSync(raw, "utf8"));
-  return JSON.parse(Buffer.from(raw, "base64").toString("utf8"));
 }
 
 function bool(name: string, fallback = false): boolean {
@@ -40,15 +38,62 @@ function csv(name: string): Set<string> {
   );
 }
 
+function loadJsonObject(raw: string): Record<string, string> {
+  const value = raw.trim();
+  if (value.startsWith("{")) return JSON.parse(value);
+  if (fs.existsSync(value)) return JSON.parse(fs.readFileSync(value, "utf8"));
+  return JSON.parse(Buffer.from(value, "base64").toString("utf8"));
+}
+
 const dataDir = path.resolve(process.env.DATA_DIR ?? "./data");
+const sessionId = process.env.WA_SESSION_ID || "default";
+const sessionDir = sessionId === "default" ? dataDir : path.join(dataDir, "sessions", sessionId);
 fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 try { fs.chmodSync(dataDir, 0o700); } catch {}
+fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
+try { fs.chmodSync(sessionDir, 0o700); } catch {}
+
+const featureLeadCrm = bool("FEATURE_LEAD_CRM", true);
+const serviceAccountRaw = optional("GOOGLE_SERVICE_ACCOUNT_JSON");
 
 export const config = {
+  // Generic application identity. STRATUM is just one possible deployment profile.
+  appId: process.env.APP_ID || "wa-abn",
+  appName: process.env.APP_NAME || "WA-ABN",
+  appDescription: process.env.APP_DESCRIPTION || "Secure reusable WhatsApp automation platform",
+  appContext:
+    process.env.APP_CONTEXT ||
+    process.env.COMPANY_CONTEXT ||
+    "A team using WhatsApp for operational workflows.",
+  botDisplayName: process.env.BOT_DISPLAY_NAME || "WA-ABN",
+  profile: process.env.APP_PROFILE || "lead-crm",
+
   dataDir,
-  authDir: path.join(dataDir, "wa-auth"),
-  statePath: path.join(dataDir, "state.json"),
-  auditPath: path.join(dataDir, "security-audit.jsonl"),
+  sessionId,
+  sessionDir,
+  authDir: path.join(sessionDir, "wa-auth"),
+  statePath: path.join(sessionDir, "state.json"),
+  auditPath: path.join(sessionDir, "security-audit.jsonl"),
+  historyPath: path.join(sessionDir, "message-history.jsonl"),
+  schedulerPath: path.join(sessionDir, "scheduled-jobs.json"),
+
+  features: {
+    leadCrm: featureLeadCrm,
+    aiExtraction: bool("FEATURE_AI_EXTRACTION", featureLeadCrm),
+    opsDashboard: bool("OPS_DASHBOARD_ENABLED", false),
+    scheduler: bool("FEATURE_SCHEDULER", true),
+    polls: bool("FEATURE_POLLS", true),
+    contacts: bool("FEATURE_CONTACTS", true),
+    messageHistory: bool("FEATURE_MESSAGE_HISTORY", false),
+    receipts: bool("FEATURE_RECEIPTS", true),
+    search: bool("FEATURE_SEARCH", true),
+    digests: bool("FEATURE_DIGESTS", true),
+    exports: bool("FEATURE_EXPORTS", true),
+    pipeline: bool("FEATURE_PIPELINE", true),
+    backups: bool("FEATURE_BACKUPS", true),
+    retryQueue: bool("FEATURE_RETRY_QUEUE", true),
+    webhooks: bool("FEATURE_WEBHOOKS", false),
+  },
 
   // Optional read-only operations dashboard. Localhost by default.
   opsDashboardEnabled: bool("OPS_DASHBOARD_ENABLED", false),
@@ -57,28 +102,44 @@ export const config = {
   opsDashboardToken: process.env.OPS_DASHBOARD_TOKEN || "",
 
   // WhatsApp trust boundary
-  groupJid: process.env.WA_GROUP_JID || null,
-  pairingNumber: process.env.WA_PAIRING_NUMBER || null,
+  groupJid: optional("WA_GROUP_JID"),
+  allowedGroupJids: csv("WA_ALLOWED_GROUP_JIDS"),
+  pairingNumber: optional("WA_PAIRING_NUMBER"),
   allowedSenderJids: csv("WA_ALLOWED_SENDER_JIDS"),
   contextWaitMs: Number(process.env.CONTEXT_WAIT_SECONDS ?? 120) * 1000,
   maxMessagesPerMinute: Math.max(1, Number(process.env.MAX_MESSAGES_PER_MINUTE ?? 20)),
   maxImageBytes: Math.max(1024 * 1024, Number(process.env.MAX_IMAGE_BYTES ?? 8 * 1024 * 1024)),
   authEncryptionKey: parseAuthKey(required("WA_AUTH_ENCRYPTION_KEY")),
 
-  // Claude
+  // History/privacy
+  historyMaxTextChars: Math.max(0, Math.min(20_000, Number(process.env.HISTORY_MAX_TEXT_CHARS ?? 2000))),
+  historyRetentionDays: Math.max(1, Number(process.env.HISTORY_RETENTION_DAYS ?? 30)),
+  autoDigestEveryHours: Math.max(0, Number(process.env.AUTO_DIGEST_EVERY_HOURS ?? 0)),
+
+  // Optional outbound workflow integration (n8n/automation). Disabled by default.
+  outboundWebhookUrl: optional("OUTBOUND_WEBHOOK_URL"),
+  outboundWebhookToken: optional("OUTBOUND_WEBHOOK_TOKEN"),
+  webhookAllowedHosts: csv("WEBHOOK_ALLOWED_HOSTS"),
+
+  // AI
   model: process.env.CLAUDE_MODEL || "claude-opus-5-5",
-  companyContext:
-    process.env.COMPANY_CONTEXT ||
-    "STRATUM is a company that meets prospective clients and partners at events and in person.",
-  defaultRegion: process.env.DEFAULT_PHONE_REGION || null,
+  defaultRegion: optional("DEFAULT_PHONE_REGION"),
 
-  // Google Sheets
-  sheetId: required("GOOGLE_SHEET_ID"),
+  // Optional Google Sheets CRM backend. Required only when FEATURE_LEAD_CRM=true.
+  sheetId: featureLeadCrm ? required("GOOGLE_SHEET_ID") : optional("GOOGLE_SHEET_ID"),
   sheetTab: process.env.GOOGLE_SHEET_TAB || "Leads",
-  serviceAccount: loadServiceAccount(),
+  serviceAccount:
+    featureLeadCrm
+      ? loadJsonObject(serviceAccountRaw ?? required("GOOGLE_SERVICE_ACCOUNT_JSON"))
+      : serviceAccountRaw
+        ? loadJsonObject(serviceAccountRaw)
+        : null,
 };
-
 
 if (config.opsDashboardEnabled && config.opsDashboardToken.length < 32) {
   throw new Error("OPS_DASHBOARD_TOKEN must be at least 32 characters when the dashboard is enabled");
+}
+
+if (config.allowedGroupJids.size === 0 && config.groupJid) {
+  config.allowedGroupJids.add(config.groupJid);
 }

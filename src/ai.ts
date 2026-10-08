@@ -52,7 +52,7 @@ export interface MessageInput {
   text: string | null;
 }
 
-const EXTRACT_SYSTEM = `You are the lead-capture assistant in the WhatsApp group of the STRATUM business-development team. Teammates post leads they met at events or in person: photos of business cards (front/back, possibly several cards in one photo), shared WhatsApp contacts (vCards), or typed names/numbers, often with a short caption.
+const EXTRACT_SYSTEM = `You are the lead-capture assistant for ${config.appName}. Team members post leads they met at events or in person: photos of business cards (front/back, possibly several cards in one photo), shared WhatsApp contacts (vCards), or typed names/numbers, often with a short caption.
 
 Extract every distinct lead exactly as printed — do not invent or guess values that are not visible or stated. Read handwriting on cards too. Normalise phone numbers to E.164${config.defaultRegion ? `, assuming country ${config.defaultRegion} when no country code is shown` : ""}. If a field is not present, use null (or an empty list).
 
@@ -104,7 +104,7 @@ const EnrichmentSchema = z.object({
   hq_location: z.string().nullable(),
   company_summary: z.string().nullable().describe("1-2 sentences on what the company does"),
   person_summary: z.string().nullable().describe("1-2 sentences on the person's role/background"),
-  priority: z.enum(["Hot", "Warm", "Cold"]).describe("Fit for STRATUM, using the team context and ICP"),
+  priority: z.enum(["Hot", "Warm", "Cold"]).describe(`Fit for ${config.appName}, using the configured application/business context`),
   priority_reason: z.string(),
   suggested_next_step: z.string(),
   confidence: z.enum(["High", "Medium", "Low"]).describe("How sure you are the web results are the same person/company"),
@@ -113,10 +113,10 @@ const EnrichmentSchema = z.object({
 export type Enrichment = z.infer<typeof EnrichmentSchema>;
 
 export async function enrichLead(lead: Lead, teamContext: string | null, event: string | null): Promise<Enrichment> {
-  const system = `You enrich sales leads for STRATUM.
+  const system = `You enrich sales leads for ${config.appName}.
 
-About STRATUM and who we sell to:
-${config.companyContext}
+Application/business context:
+${config.appContext}
 
 Research the lead on the web: confirm the company, its website, industry, size and HQ, and find the person's LinkedIn profile and role. Prefer official sites and LinkedIn. Be careful with common names — only attribute a profile to the lead when the company or other details match; otherwise leave it null and lower the confidence. Keep values from the card unless the web clearly corrects a typo. Keep searches focused (a handful is enough).`;
 

@@ -17,6 +17,8 @@ const runtime = {
   connectionChangedAt: new Date().toISOString(),
   currentEvent: null as string | null,
   pendingLeads: 0,
+  pairingState: "idle" as "idle" | "required" | "code-issued",
+  groups: {} as Record<string, { subject: string; participants: number; admins: number }>,
 };
 
 export type CounterName = keyof typeof counters;
@@ -36,6 +38,14 @@ export function setCurrentEvent(event: string | null): void {
 
 export function setPendingLeads(count: number): void {
   runtime.pendingLeads = Math.max(0, count);
+}
+
+export function setPairingState(state: "idle" | "required" | "code-issued"): void {
+  runtime.pairingState = state;
+}
+
+export function setGroupInfo(jid: string, info: { subject: string; participants: number; admins: number }): void {
+  runtime.groups[jid] = info;
 }
 
 export function opsSnapshot() {
