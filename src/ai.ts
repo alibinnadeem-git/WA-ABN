@@ -113,10 +113,10 @@ const EnrichmentSchema = z.object({
 export type Enrichment = z.infer<typeof EnrichmentSchema>;
 
 export async function enrichLead(lead: Lead, teamContext: string | null, event: string | null): Promise<Enrichment> {
-  const system = `You enrich sales leads for STRATUM.
+  const system = `You enrich sales leads for ${config.appName}.
 
-About STRATUM and who we sell to:
-${config.companyContext}
+Application/business context:
+${config.appContext}
 
 Research the lead on the web: confirm the company, its website, industry, size and HQ, and find the person's LinkedIn profile and role. Prefer official sites and LinkedIn. Be careful with common names — only attribute a profile to the lead when the company or other details match; otherwise leave it null and lower the confidence. Keep values from the card unless the web clearly corrects a typo. Keep searches focused (a handful is enough).`;
 
