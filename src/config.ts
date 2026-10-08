@@ -46,8 +46,12 @@ function loadJsonObject(raw: string): Record<string, string> {
 }
 
 const dataDir = path.resolve(process.env.DATA_DIR ?? "./data");
+const sessionId = process.env.WA_SESSION_ID || "default";
+const sessionDir = sessionId === "default" ? dataDir : path.join(dataDir, "sessions", sessionId);
 fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 try { fs.chmodSync(dataDir, 0o700); } catch {}
+fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
+try { fs.chmodSync(sessionDir, 0o700); } catch {}
 
 const featureLeadCrm = bool("FEATURE_LEAD_CRM", true);
 const serviceAccountRaw = optional("GOOGLE_SERVICE_ACCOUNT_JSON");
@@ -65,11 +69,13 @@ export const config = {
   profile: process.env.APP_PROFILE || "lead-crm",
 
   dataDir,
-  authDir: path.join(dataDir, "wa-auth"),
-  statePath: path.join(dataDir, "state.json"),
-  auditPath: path.join(dataDir, "security-audit.jsonl"),
-  historyPath: path.join(dataDir, "message-history.jsonl"),
-  schedulerPath: path.join(dataDir, "scheduled-jobs.json"),
+  sessionId,
+  sessionDir,
+  authDir: path.join(sessionDir, "wa-auth"),
+  statePath: path.join(sessionDir, "state.json"),
+  auditPath: path.join(sessionDir, "security-audit.jsonl"),
+  historyPath: path.join(sessionDir, "message-history.jsonl"),
+  schedulerPath: path.join(sessionDir, "scheduled-jobs.json"),
 
   features: {
     leadCrm: featureLeadCrm,
