@@ -89,8 +89,46 @@ Mount `/data` as a persistent volume. If it is lost, you'll have to re-link What
 
 ## Security posture
 
-WA-ABN deliberately remains smaller than full WhatsApp gateway products such as WAHA/OpenWA/WPPConnect: it has no dashboard, public API, Socket.IO server, registration flow, webhook receiver, database server, updater, or author telemetry. That keeps the attack surface aligned to the actual STRATUM leads-group use case.
+WA-ABN deliberately remains smaller than full WhatsApp gateway products such as WAHA/OpenWA/WPPConnect. It now has an optional, read-only local Ops Dashboard, but still has no general WhatsApp send API, Socket.IO server, registration flow, webhook receiver, application database server, updater, or author telemetry. That keeps the attack surface aligned to the actual STRATUM leads-group use case.
 
 Production hardening includes encrypted Baileys credentials, single-group enforcement, optional participant allowlisting, inbound rate/media limits, a local append-only security audit log, non-root Docker execution, and automated npm/OSV/Semgrep/CodeQL/Dependabot checks.
 
 See [SECURITY.md](./SECURITY.md) before deployment. The safest deployment uses a dedicated WhatsApp number, no published container ports, a persistent encrypted data volume, and host-level default-deny egress that permits only WhatsApp/Meta, Anthropic and Google services required by the bot.
+
+
+## Optional Ops Dashboard
+
+WA-ABN now includes a deliberately **read-only** operations dashboard inspired by the useful free operational features in OpenWA, WAHA and Waxum, without exposing a general WhatsApp REST-send API.
+
+Enable it with:
+
+```bash
+OPS_DASHBOARD_ENABLED=true
+OPS_DASHBOARD_TOKEN="$(openssl rand -base64 32)"
+```
+
+By default it binds to `127.0.0.1:8787`. Open `http://127.0.0.1:8787` and authenticate with username `admin` and the configured token.
+
+The dashboard provides:
+- WhatsApp connection state and uptime
+- processed/rejected/rate-limited/media-rejected counts
+- leads saved and duplicates detected
+- pending-context count and current event tag
+- Hot/Warm/Cold/New lead summary
+- read-only lead search across the existing Google Sheet
+- recent security-audit events
+- `/healthz` health probe
+- authenticated `/metrics` endpoint in Prometheus text format
+
+It intentionally does **not** provide arbitrary message sending, group administration, credential management, webhook creation, shell access, or remote code/update controls.
+
+### Docker access
+
+Because the secure default binds to container-localhost, either use an SSH tunnel into the host/container environment or explicitly bind the dashboard to all container interfaces and publish it **only on host loopback**:
+
+```bash
+OPS_DASHBOARD_HOST=0.0.0.0
+docker run ... -p 127.0.0.1:8787:8787 wa-abn
+```
+
+Do not publish the dashboard directly to the public Internet. If remote team access is later required, place it behind an authenticated reverse proxy/VPN/Tailscale-style private network.
