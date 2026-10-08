@@ -126,3 +126,50 @@ function sanitize(value: string | undefined): string {
   if (!value) return "";
   return /^[=+\-@]/.test(value) ? `'${value}` : value;
 }
+
+
+async function readLeadRows(): Promise<string[][]> {
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: config.sheetId,
+    range: range(`A2:${lastCol}`),
+  });
+  return (res.data.values ?? []) as string[][];
+}
+
+function rowObject(row: string[]): LeadRow {
+  const out: LeadRow = {};
+  HEADERS.forEach((header, i) => {
+    out[header] = String(row[i] ?? "");
+  });
+  return out;
+}
+
+export async function searchLeads(query: string, limit = 50): Promise<LeadRow[]> {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [];
+  const rows = await readLeadRows();
+  const matches: LeadRow[] = [];
+  for (const row of rows) {
+    if (row.some((value) => String(value ?? "").toLowerCase().includes(needle))) {
+      matches.push(rowObject(row));
+      if (matches.length >= Math.max(1, Math.min(limit, 100))) break;
+    }
+  }
+  return matches;
+}
+
+export async function leadSummary(): Promise<{ total: number; hot: number; warm: number; cold: number; new: number }> {
+  const rows = await readLeadRows();
+  const priorityCol = HEADERS.indexOf("Priority");
+  const statusCol = HEADERS.indexOf("Status");
+  let hot = 0, warm = 0, cold = 0, fresh = 0;
+  for (const row of rows) {
+    const priority = String(row[priorityCol] ?? "").toLowerCase();
+    const status = String(row[statusCol] ?? "").toLowerCase();
+    if (priority === "hot") hot++;
+    else if (priority === "warm") warm++;
+    else if (priority === "cold") cold++;
+    if (status === "new") fresh++;
+  }
+  return { total: rows.length, hot, warm, cold, new: fresh };
+}
