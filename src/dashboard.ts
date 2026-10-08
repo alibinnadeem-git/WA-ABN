@@ -3,9 +3,11 @@ import { timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { config } from "./config.js";
 import { opsSnapshot, prometheusMetrics } from "./ops.js";
-import { leadSummary, searchLeads } from "./sheets.js";
+import { leadSummary, pipelineSummary, searchLeads } from "./sheets.js";
 import { historyStats, searchHistory } from "./history.js";
 import { listReminders } from "./scheduler.js";
+import { listBackups } from "./backup.js";
+import { listRetries } from "./retry.js";
 
 function unauthorized(res: ServerResponse): void {
   res.writeHead(401, {
@@ -136,7 +138,7 @@ export function startOpsDashboard(): void {
         return;
       }
       if (url.pathname === "/api/status") {
-        json(res, { runtime: opsSnapshot(), features: config.features, leads: config.features.leadCrm ? await leadSummary() : null, history: historyStats(), reminders: listReminders().length });
+        json(res, { app: { id: config.appId, name: config.appName, profile: config.profile, sessionId: config.sessionId }, runtime: opsSnapshot(), features: config.features, leads: config.features.leadCrm ? await leadSummary() : null, pipeline: config.features.leadCrm && config.features.pipeline ? await pipelineSummary() : null, history: historyStats(), reminders: listReminders().length, retries: config.features.retryQueue ? listRetries().length : 0, backups: config.features.backups ? listBackups().length : 0 });
         return;
       }
       if (url.pathname === "/api/audit") {
@@ -155,6 +157,14 @@ export function startOpsDashboard(): void {
           crm: config.features.leadCrm && query ? await searchLeads(query, 25) : [],
           history: config.features.messageHistory && query ? searchHistory(query, 25) : [],
         });
+        return;
+      }
+      if (url.pathname === "/api/retries") {
+        json(res, config.features.retryQueue ? listRetries() : []);
+        return;
+      }
+      if (url.pathname === "/api/backups") {
+        json(res, config.features.backups ? listBackups() : []);
         return;
       }
       if (url.pathname === "/metrics") {
