@@ -1,11 +1,16 @@
 import { google } from "googleapis";
 import { config } from "./config.js";
 
-const auth = new google.auth.GoogleAuth({
-  credentials: config.serviceAccount,
-  scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-});
-const sheets = google.sheets({ version: "v4", auth });
+function client() {
+  if (!config.features.leadCrm || !config.sheetId || !config.serviceAccount) {
+    throw new Error("Lead CRM Google Sheets backend is not configured");
+  }
+  const auth = new google.auth.GoogleAuth({
+    credentials: config.serviceAccount,
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
+  return google.sheets({ version: "v4", auth });
+}
 
 export const HEADERS = [
   "Captured At",
@@ -42,20 +47,20 @@ let tabGid = 0;
 
 /** Creates the tab and header row if they don't exist yet. */
 export async function ensureSheet(): Promise<void> {
-  const meta = await sheets.spreadsheets.get({ spreadsheetId: config.sheetId });
+  const meta = await client().spreadsheets.get({ spreadsheetId: config.sheetId });
   const tab = meta.data.sheets?.find((s) => s.properties?.title === config.sheetTab);
   if (tab) {
     tabGid = tab.properties?.sheetId ?? 0;
   } else {
-    const created = await sheets.spreadsheets.batchUpdate({
+    const created = await client().spreadsheets.batchUpdate({
       spreadsheetId: config.sheetId,
       requestBody: { requests: [{ addSheet: { properties: { title: config.sheetTab } } }] },
     });
     tabGid = created.data.replies?.[0]?.addSheet?.properties?.sheetId ?? 0;
   }
-  const head = await sheets.spreadsheets.values.get({ spreadsheetId: config.sheetId, range: range("1:1") });
+  const head = await client().spreadsheets.values.get({ spreadsheetId: config.sheetId, range: range("1:1") });
   if (!head.data.values?.[0]?.length) {
-    await sheets.spreadsheets.values.update({
+    await client().spreadsheets.values.update({
       spreadsheetId: config.sheetId,
       range: range("A1"),
       valueInputOption: "RAW",
@@ -70,7 +75,7 @@ const digits = (s: string) => s.replace(/\D/g, "");
 export async function findDuplicate(emails: string[], phones: string[]): Promise<number | null> {
   const emailCol = HEADERS.indexOf("Email");
   const phoneCol = HEADERS.indexOf("Phone");
-  const res = await sheets.spreadsheets.values.get({
+  const res = await client().spreadsheets.values.get({
     spreadsheetId: config.sheetId,
     range: range(`A2:${lastCol}`),
   });
@@ -90,7 +95,7 @@ export async function findDuplicate(emails: string[], phones: string[]): Promise
 }
 
 export async function appendLead(row: LeadRow): Promise<number | null> {
-  const res = await sheets.spreadsheets.values.append({
+  const res = await client().spreadsheets.values.append({
     spreadsheetId: config.sheetId,
     range: range("A1"),
     valueInputOption: "USER_ENTERED",
@@ -106,9 +111,9 @@ export async function appendLead(row: LeadRow): Promise<number | null> {
 export async function appendNoteToRow(rowNumber: number, note: string): Promise<void> {
   const col = String.fromCharCode("A".charCodeAt(0) + HEADERS.indexOf("Team Notes"));
   const cell = range(`${col}${rowNumber}`);
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: config.sheetId, range: cell });
+  const res = await client().spreadsheets.values.get({ spreadsheetId: config.sheetId, range: cell });
   const existing = res.data.values?.[0]?.[0] ?? "";
-  await sheets.spreadsheets.values.update({
+  await client().spreadsheets.values.update({
     spreadsheetId: config.sheetId,
     range: cell,
     valueInputOption: "RAW",
@@ -117,6 +122,7 @@ export async function appendNoteToRow(rowNumber: number, note: string): Promise<
 }
 
 export function rowLink(rowNumber: number | null): string {
+  if (!config.sheetId) return "";
   const base = `https://docs.google.com/spreadsheets/d/${config.sheetId}/edit`;
   return rowNumber ? `${base}#gid=${tabGid}&range=A${rowNumber}` : `${base}#gid=${tabGid}`;
 }
@@ -129,7 +135,7 @@ function sanitize(value: string | undefined): string {
 
 
 async function readLeadRows(): Promise<string[][]> {
-  const res = await sheets.spreadsheets.values.get({
+  const res = await client().spreadsheets.values.get({
     spreadsheetId: config.sheetId,
     range: range(`A2:${lastCol}`),
   });
