@@ -52,7 +52,7 @@ let tabGid = 0;
 
 /** Creates the tab and header row if they don't exist yet. */
 export async function ensureSheet(): Promise<void> {
-  const meta = await client().spreadsheets.get({ spreadsheetId: config.sheetId });
+  const meta = await client().spreadsheets.get({ spreadsheetId: config.sheetId! });
   const tab = meta.data.sheets?.find((s) => s.properties?.title === config.sheetTab);
   if (tab) {
     tabGid = tab.properties?.sheetId ?? 0;
