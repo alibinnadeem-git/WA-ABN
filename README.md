@@ -44,7 +44,7 @@ The bot creates the `Leads` tab and header row if they're missing. The columns a
 ```bash
 cp .env.example .env
 ```
-Fill in `ANTHROPIC_API_KEY`, `GOOGLE_SHEET_ID` and `COMPANY_CONTEXT`. Write `COMPANY_CONTEXT` carefully: it drives the Hot/Warm/Cold scoring and the suggested next steps.
+Fill in `ANTHROPIC_API_KEY`, `GOOGLE_SHEET_ID`, `COMPANY_CONTEXT`, and a strong `WA_AUTH_ENCRYPTION_KEY` generated with `openssl rand -base64 32`. Write `COMPANY_CONTEXT` carefully: it drives the Hot/Warm/Cold scoring and the suggested next steps.
 
 ### 3. Run and link WhatsApp
 ```bash
@@ -56,7 +56,7 @@ npm start
 2. Send any message in the leads group. The bot logs `Group "STRATUM Leads" → WA_GROUP_JID=1203…@g.us`.
 3. Put that value in `.env` as `WA_GROUP_JID` and restart. The bot only listens to that group.
 
-The login is saved in `data/wa-auth/`, so you only scan once.
+The linked-device state is saved in `data/wa-auth/` **encrypted with AES-256-GCM**. Set `WA_AUTH_ENCRYPTION_KEY` before first start and protect it separately from the data volume.
 
 ## Deploying (it must run 24/7)
 
@@ -85,3 +85,12 @@ Mount `/data` as a persistent volume. If it is lost, you'll have to re-link What
 - Each lead uses two Claude calls (extraction + enrichment with up to ~10 web searches/fetches). Plain-text group chatter also goes through a short extraction call so the bot can tell whether it's a lead. If the group is chatty, consider a dedicated leads-only group.
 - If web enrichment fails, the lead is still saved with the card details. The row's Enrichment Confidence is set to "Not enriched".
 - A lead waiting for context lives in memory. If the bot restarts within those 2 minutes, re-post that card.
+
+
+## Security posture
+
+WA-ABN deliberately remains smaller than full WhatsApp gateway products such as WAHA/OpenWA/WPPConnect: it has no dashboard, public API, Socket.IO server, registration flow, webhook receiver, database server, updater, or author telemetry. That keeps the attack surface aligned to the actual STRATUM leads-group use case.
+
+Production hardening includes encrypted Baileys credentials, single-group enforcement, optional participant allowlisting, inbound rate/media limits, a local append-only security audit log, non-root Docker execution, and automated npm/OSV/Semgrep/CodeQL/Dependabot checks.
+
+See [SECURITY.md](./SECURITY.md) before deployment. The safest deployment uses a dedicated WhatsApp number, no published container ports, a persistent encrypted data volume, and host-level default-deny egress that permits only WhatsApp/Meta, Anthropic and Google services required by the bot.

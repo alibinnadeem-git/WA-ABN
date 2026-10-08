@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { enrichLead, extractLeads, type Extraction, type Lead, type MessageInput } from "./ai.js";
-import { config } from "./config.js";
+import { config } from "./config.js";\nimport { audit } from "./audit.js";
 import { appendLead, appendNoteToRow, findDuplicate, rowLink } from "./sheets.js";
 
 /** What the WhatsApp layer hands us for each group message. */
