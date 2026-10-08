@@ -51,8 +51,8 @@ const saveState = () => fs.writeFileSync(config.statePath, JSON.stringify(state,
 
 const SKIP_WORDS = /^(skip|no|none|nope|n\/a|na|nothing|-)$/i;
 
-const HELP = `*STRATUM Lead Bot* 📇
-Send any of these to the group and I'll enrich it and add it to the leads sheet:
+const HELP = `*${config.botDisplayName} — Lead CRM* 📇
+Send any of these to the group and I'll enrich it and add it to the configured CRM sheet:
 • a photo of a business card (several cards per photo is fine)
 • a shared WhatsApp contact
 • a name / company / number typed out
