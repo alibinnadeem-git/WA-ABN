@@ -4,21 +4,37 @@ import makeWASocket, {
   downloadMediaMessage,
   fetchLatestBaileysVersion,
   normalizeMessageContent,
-  useMultiFileAuthState,
   type WAMessage,
   type WASocket,
 } from "baileys";
 import pino from "pino";
 import qrcode from "qrcode-terminal";
 import { config } from "./config.js";
+import { useEncryptedMultiFileAuthState } from "./secure-auth.js";
 import { handleMessage, type Chat, type IncomingMessage } from "./leads.js";
 import type { MessageInput } from "./ai.js";
 import { ensureSheet } from "./sheets.js";
 
-const logger = pino({ level: process.env.LOG_LEVEL ?? "warn" });
-const seen = new Set<string>(); // WhatsApp can redeliver; process each message once
+const logger = pino({
+  level: process.env.LOG_LEVEL ?? "warn",
+  redact: {
+    paths: [
+      "req.headers.authorization",
+      "req.headers.cookie",
+      "apiKey",
+      "*.apiKey",
+      "password",
+      "*.password",
+      "token",
+      "*.token",
+    ],
+    censor: "[REDACTED]",
+  },
+});
+
+const seen = new Set<string>();
 const announcedGroups = new Set<string>();
-const recent = new Map<string, WAMessage>(); // recent group messages, for quoting/reacting later
+const recent = new Map<string, WAMessage>();
 
 function remember(m: WAMessage): void {
   recent.set(m.key.id!, m);
@@ -43,8 +59,18 @@ function makeChat(sock: WASocket, jid: string): Chat {
 const SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 type ImageType = (typeof SUPPORTED_IMAGE_TYPES)[number];
 
+function mediaLength(media: { fileLength?: unknown }): number {
+  const raw = media.fileLength as { toString?: () => string } | string | number | undefined;
+  const parsed = Number(typeof raw === "object" && raw?.toString ? raw.toString() : raw ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 async function start(): Promise<void> {
-  const { state, saveCreds } = await useMultiFileAuthState(config.authDir);
+  const { state, saveCreds } = await useEncryptedMultiFileAuthState(
+    config.authDir,
+    config.authEncryptionKey,
+    { allowPlaintextMigration: config.allowPlaintextAuthMigration },
+  );
   const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
@@ -58,10 +84,10 @@ async function start(): Promise<void> {
   sock.ev.on("creds.update", saveCreds);
 
   if (config.pairingNumber && !sock.authState.creds.registered) {
-    // Pair by code instead of QR (handy on a headless server).
     setTimeout(async () => {
       const code = await sock.requestPairingCode(config.pairingNumber!.replace(/\D/g, ""));
-      console.log(`\nWhatsApp → Linked devices → Link with phone number → enter code: ${code}\n`);
+      console.log("\nWhatsApp → Linked devices → Link with phone number → enter the one-time code shown below.");
+      console.log(code + "\n");
     }, 3000);
   }
 
@@ -73,13 +99,17 @@ async function start(): Promise<void> {
     if (connection === "open") {
       console.log("✅ Connected to WhatsApp.");
       if (!config.groupJid) {
-        console.log("WA_GROUP_JID is not set. Send any message in the leads group and its id will be printed here.");
+        console.log(
+          config.allowGroupDiscovery
+            ? "WA_GROUP_JID is not set. Temporary group discovery is enabled."
+            : "WA_GROUP_JID is not set. Secure mode will ignore all group messages.",
+        );
       }
     }
     if (connection === "close") {
       const status = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
       if (status === DisconnectReason.loggedOut) {
-        console.error(`Logged out. Delete ${config.authDir} and restart to link again.`);
+        console.error(`Logged out. Remove ${config.authDir} and restart to link again.`);
         process.exit(1);
       }
       console.warn(`Connection closed (${status ?? "unknown"}), reconnecting…`);
@@ -105,6 +135,7 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
   if (!jid?.endsWith("@g.us") || !id || m.key.fromMe || !m.message) return;
 
   if (!config.groupJid) {
+    if (!config.allowGroupDiscovery) return;
     if (!announcedGroups.has(jid)) {
       announcedGroups.add(jid);
       const meta = await sock.groupMetadata(jid).catch(() => null);
@@ -112,6 +143,7 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
     }
     return;
   }
+
   if (jid !== config.groupJid) return;
   if (seen.has(id)) return;
   seen.add(id);
@@ -135,8 +167,23 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
   if (media) {
     input.text = media.caption ?? null;
     const mime = (media.mimetype ?? "image/jpeg").split(";")[0] as ImageType;
+    const declaredLength = mediaLength(media);
+    if (declaredLength > config.maxMediaBytes) {
+      console.warn("Rejected oversized WhatsApp media before download.");
+      return;
+    }
+
     if (SUPPORTED_IMAGE_TYPES.includes(mime)) {
-      const data = await downloadMediaMessage(m, "buffer", {}, { logger, reuploadRequest: sock.updateMediaMessage });
+      const data = await downloadMediaMessage(
+        m,
+        "buffer",
+        {},
+        { logger, reuploadRequest: sock.updateMediaMessage },
+      );
+      if (data.length > config.maxMediaBytes) {
+        console.warn("Rejected oversized WhatsApp media after download.");
+        return;
+      }
       input.images.push({ data, mediaType: mime });
     }
   }
