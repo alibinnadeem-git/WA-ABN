@@ -52,7 +52,7 @@ export interface MessageInput {
   text: string | null;
 }
 
-const EXTRACT_SYSTEM = `You are the lead-capture assistant in the WhatsApp group of the STRATUM business-development team. Teammates post leads they met at events or in person: photos of business cards (front/back, possibly several cards in one photo), shared WhatsApp contacts (vCards), or typed names/numbers, often with a short caption.
+const EXTRACT_SYSTEM = `You are the lead-capture assistant for ${config.appName}. Team members post leads they met at events or in person: photos of business cards (front/back, possibly several cards in one photo), shared WhatsApp contacts (vCards), or typed names/numbers, often with a short caption.
 
 Extract every distinct lead exactly as printed — do not invent or guess values that are not visible or stated. Read handwriting on cards too. Normalise phone numbers to E.164${config.defaultRegion ? `, assuming country ${config.defaultRegion} when no country code is shown` : ""}. If a field is not present, use null (or an empty list).
 
@@ -104,7 +104,7 @@ const EnrichmentSchema = z.object({
   hq_location: z.string().nullable(),
   company_summary: z.string().nullable().describe("1-2 sentences on what the company does"),
   person_summary: z.string().nullable().describe("1-2 sentences on the person's role/background"),
-  priority: z.enum(["Hot", "Warm", "Cold"]).describe("Fit for STRATUM, using the team context and ICP"),
+  priority: z.enum(["Hot", "Warm", "Cold"]).describe(`Fit for ${config.appName}, using the configured application/business context`),
   priority_reason: z.string(),
   suggested_next_step: z.string(),
   confidence: z.enum(["High", "Medium", "Low"]).describe("How sure you are the web results are the same person/company"),
