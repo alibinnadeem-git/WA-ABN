@@ -37,6 +37,11 @@ export const HEADERS = [
   "Enrichment Confidence",
   "Sources",
   "Status",
+  "Owner",
+  "Follow-up Due",
+  "Last Activity",
+  "Pipeline Stage",
+  "Activity Timeline",
 ] as const;
 type Header = (typeof HEADERS)[number];
 export type LeadRow = Partial<Record<Header, string>>;
@@ -59,14 +64,37 @@ export async function ensureSheet(): Promise<void> {
     tabGid = created.data.replies?.[0]?.addSheet?.properties?.sheetId ?? 0;
   }
   const head = await client().spreadsheets.values.get({ spreadsheetId: config.sheetId, range: range("1:1") });
-  if (!head.data.values?.[0]?.length) {
+  const existingHeaders = (head.data.values?.[0] ?? []).map(String);
+  if (!existingHeaders.length) {
     await client().spreadsheets.values.update({
       spreadsheetId: config.sheetId,
       range: range("A1"),
       valueInputOption: "RAW",
       requestBody: { values: [[...HEADERS]] },
     });
+  } else {
+    const missing = HEADERS.filter((header) => !existingHeaders.includes(header));
+    if (missing.length) {
+      const startCol = columnName(existingHeaders.length + 1);
+      await client().spreadsheets.values.update({
+        spreadsheetId: config.sheetId,
+        range: range(`${startCol}1`),
+        valueInputOption: "RAW",
+        requestBody: { values: [[...missing]] },
+      });
+    }
   }
+}
+
+function columnName(index: number): string {
+  let n = index;
+  let out = "";
+  while (n > 0) {
+    n--;
+    out = String.fromCharCode(65 + (n % 26)) + out;
+    n = Math.floor(n / 26);
+  }
+  return out;
 }
 
 const digits = (s: string) => s.replace(/\D/g, "");
@@ -178,4 +206,58 @@ export async function leadSummary(): Promise<{ total: number; hot: number; warm:
     if (status === "new") fresh++;
   }
   return { total: rows.length, hot, warm, cold, new: fresh };
+}
+
+
+export async function updateLeadFields(rowNumber: number, fields: LeadRow): Promise<void> {
+  if (!Number.isInteger(rowNumber) || rowNumber < 2) throw new Error("Invalid CRM row");
+  const now = new Date().toISOString();
+  const updates: { range: string; values: string[][] }[] = [];
+  for (const [key, value] of Object.entries(fields)) {
+    const index = HEADERS.indexOf(key as Header);
+    if (index < 0) continue;
+    updates.push({
+      range: range(`${columnName(index + 1)}${rowNumber}`),
+      values: [[sanitize(String(value ?? ""))]],
+    });
+  }
+  const activityIndex = HEADERS.indexOf("Last Activity");
+  if (activityIndex >= 0 && fields["Last Activity"] == null) {
+    updates.push({
+      range: range(`${columnName(activityIndex + 1)}${rowNumber}`),
+      values: [[now]],
+    });
+  }
+  if (!updates.length) return;
+  await client().spreadsheets.values.batchUpdate({
+    spreadsheetId: config.sheetId!,
+    requestBody: { valueInputOption: "RAW", data: updates },
+  });
+}
+
+export async function appendActivity(rowNumber: number, text: string): Promise<void> {
+  const index = HEADERS.indexOf("Activity Timeline");
+  if (index < 0) return;
+  const cell = range(`${columnName(index + 1)}${rowNumber}`);
+  const res = await client().spreadsheets.values.get({ spreadsheetId: config.sheetId!, range: cell });
+  const existing = String(res.data.values?.[0]?.[0] ?? "");
+  const line = `[${new Date().toISOString()}] ${text}`;
+  await client().spreadsheets.values.update({
+    spreadsheetId: config.sheetId!,
+    range: cell,
+    valueInputOption: "RAW",
+    requestBody: { values: [[existing ? `${existing}\n${line}` : line]] },
+  });
+  await updateLeadFields(rowNumber, { "Last Activity": new Date().toISOString() });
+}
+
+export async function pipelineSummary(): Promise<Record<string, number>> {
+  const rows = await readLeadRows();
+  const index = HEADERS.indexOf("Pipeline Stage");
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    const stage = String(row[index] ?? "New").trim() || "New";
+    counts[stage] = (counts[stage] ?? 0) + 1;
+  }
+  return counts;
 }
