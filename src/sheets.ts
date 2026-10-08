@@ -58,16 +58,16 @@ export async function ensureSheet(): Promise<void> {
     tabGid = tab.properties?.sheetId ?? 0;
   } else {
     const created = await client().spreadsheets.batchUpdate({
-      spreadsheetId: config.sheetId,
+      spreadsheetId: config.sheetId!,
       requestBody: { requests: [{ addSheet: { properties: { title: config.sheetTab } } }] },
     });
     tabGid = created.data.replies?.[0]?.addSheet?.properties?.sheetId ?? 0;
   }
-  const head = await client().spreadsheets.values.get({ spreadsheetId: config.sheetId, range: range("1:1") });
+  const head = await client().spreadsheets.values.get({ spreadsheetId: config.sheetId!, range: range("1:1") });
   const existingHeaders = (head.data.values?.[0] ?? []).map(String);
   if (!existingHeaders.length) {
     await client().spreadsheets.values.update({
-      spreadsheetId: config.sheetId,
+      spreadsheetId: config.sheetId!,
       range: range("A1"),
       valueInputOption: "RAW",
       requestBody: { values: [[...HEADERS]] },
@@ -77,7 +77,7 @@ export async function ensureSheet(): Promise<void> {
     if (missing.length) {
       const startCol = columnName(existingHeaders.length + 1);
       await client().spreadsheets.values.update({
-        spreadsheetId: config.sheetId,
+        spreadsheetId: config.sheetId!,
         range: range(`${startCol}1`),
         valueInputOption: "RAW",
         requestBody: { values: [[...missing]] },
@@ -104,7 +104,7 @@ export async function findDuplicate(emails: string[], phones: string[]): Promise
   const emailCol = HEADERS.indexOf("Email");
   const phoneCol = HEADERS.indexOf("Phone");
   const res = await client().spreadsheets.values.get({
-    spreadsheetId: config.sheetId,
+    spreadsheetId: config.sheetId!,
     range: range(`A2:${lastCol}`),
   });
   const wantEmails = new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean));
@@ -124,7 +124,7 @@ export async function findDuplicate(emails: string[], phones: string[]): Promise
 
 export async function appendLead(row: LeadRow): Promise<number | null> {
   const res = await client().spreadsheets.values.append({
-    spreadsheetId: config.sheetId,
+    spreadsheetId: config.sheetId!,
     range: range("A1"),
     valueInputOption: "USER_ENTERED",
     insertDataOption: "INSERT_ROWS",
@@ -139,10 +139,10 @@ export async function appendLead(row: LeadRow): Promise<number | null> {
 export async function appendNoteToRow(rowNumber: number, note: string): Promise<void> {
   const col = String.fromCharCode("A".charCodeAt(0) + HEADERS.indexOf("Team Notes"));
   const cell = range(`${col}${rowNumber}`);
-  const res = await client().spreadsheets.values.get({ spreadsheetId: config.sheetId, range: cell });
+  const res = await client().spreadsheets.values.get({ spreadsheetId: config.sheetId!, range: cell });
   const existing = res.data.values?.[0]?.[0] ?? "";
   await client().spreadsheets.values.update({
-    spreadsheetId: config.sheetId,
+    spreadsheetId: config.sheetId!,
     range: cell,
     valueInputOption: "RAW",
     requestBody: { values: [[existing ? `${existing}\n${note}` : note]] },
@@ -164,7 +164,7 @@ function sanitize(value: string | undefined): string {
 
 async function readLeadRows(): Promise<string[][]> {
   const res = await client().spreadsheets.values.get({
-    spreadsheetId: config.sheetId,
+    spreadsheetId: config.sheetId!,
     range: range(`A2:${lastCol}`),
   });
   return (res.data.values ?? []) as string[][];
