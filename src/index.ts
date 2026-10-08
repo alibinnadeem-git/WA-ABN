@@ -4,7 +4,6 @@ import makeWASocket, {
   downloadMediaMessage,
   fetchLatestBaileysVersion,
   normalizeMessageContent,
-  useMultiFileAuthState,
   type WAMessage,
   type WASocket,
 } from "baileys";
@@ -14,6 +13,7 @@ import { config } from "./config.js";
 import { handleMessage, type Chat, type IncomingMessage } from "./leads.js";
 import type { MessageInput } from "./ai.js";
 import { ensureSheet } from "./sheets.js";
+import { useEncryptedMultiFileAuthState } from "./encrypted-auth-state.js";
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? "warn" });
 const seen = new Set<string>(); // WhatsApp can redeliver; process each message once
@@ -44,7 +44,7 @@ const SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/g
 type ImageType = (typeof SUPPORTED_IMAGE_TYPES)[number];
 
 async function start(): Promise<void> {
-  const { state, saveCreds } = await useMultiFileAuthState(config.authDir);
+  const { state, saveCreds } = await useEncryptedMultiFileAuthState(config.authDir, config.authEncryptionKey);
   const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
@@ -123,9 +123,9 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
   const input: MessageInput = { images: [], vcards: [], text: null };
   let quotedId: string | null = null;
 
-  if (content.conversation) input.text = content.conversation;
+  if (content.conversation) input.text = content.conversation.slice(0, config.maxTextChars);
   if (content.extendedTextMessage) {
-    input.text = content.extendedTextMessage.text ?? null;
+    input.text = content.extendedTextMessage.text?.slice(0, config.maxTextChars) ?? null;
     quotedId = content.extendedTextMessage.contextInfo?.stanzaId ?? null;
   }
 
@@ -133,17 +133,28 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
   const docImage = content.documentMessage?.mimetype?.startsWith("image/") ? content.documentMessage : null;
   const media = image ?? docImage;
   if (media) {
-    input.text = media.caption ?? null;
+    input.text = media.caption?.slice(0, config.maxTextChars) ?? null;
     const mime = (media.mimetype ?? "image/jpeg").split(";")[0] as ImageType;
     if (SUPPORTED_IMAGE_TYPES.includes(mime)) {
+      const declaredSize = Number(media.fileLength ?? 0);
+      if (Number.isFinite(declaredSize) && declaredSize > config.maxMediaBytes) {
+        await sock.sendMessage(jid, { text: `⚠️ Image is too large for lead processing (limit: ${Math.round(config.maxMediaBytes / 1024 / 1024)} MB).` }, { quoted: m });
+        return;
+      }
       const data = await downloadMediaMessage(m, "buffer", {}, { logger, reuploadRequest: sock.updateMediaMessage });
+      if (data.length > config.maxMediaBytes) {
+        await sock.sendMessage(jid, { text: `⚠️ Image is too large for lead processing (limit: ${Math.round(config.maxMediaBytes / 1024 / 1024)} MB).` }, { quoted: m });
+        return;
+      }
       input.images.push({ data, mediaType: mime });
     }
   }
 
-  if (content.contactMessage?.vcard) input.vcards.push(content.contactMessage.vcard);
+  if (content.contactMessage?.vcard) {
+    input.vcards.push(content.contactMessage.vcard.slice(0, config.maxVcardChars));
+  }
   for (const c of content.contactsArrayMessage?.contacts ?? []) {
-    if (c.vcard) input.vcards.push(c.vcard);
+    if (c.vcard) input.vcards.push(c.vcard.slice(0, config.maxVcardChars));
   }
 
   if (!input.text && !input.images.length && !input.vcards.length) return;
