@@ -52,7 +52,7 @@ const HELP = `*STRATUM Lead Bot* 📇
 Send any of these to the group and I'll enrich it and add it to the leads sheet:
 • a photo of a business card (several cards per photo is fine)
 • a shared WhatsApp contact
-• a name / company / number typed out
+• a typed lead prefixed with *!lead* (example: *!lead Jane Doe, Acme Corp, +1…*)
 
 Add a caption with context (where you met, what they need) to skip my follow-up question. Otherwise I'll ask once and wait ${Math.round(config.contextWaitMs / 1000)}s — reply to my question, or say *skip*.
 
@@ -64,9 +64,15 @@ Commands:
 export async function handleMessage(msg: IncomingMessage, chat: Chat): Promise<void> {
   const text = msg.input.text?.trim() ?? "";
   const hasMedia = msg.input.images.length > 0 || msg.input.vcards.length > 0;
+  const explicitTextLead = !hasMedia && /^!lead(?:\s|$)/i.test(text);
 
-  // 1. Commands
-  if (!hasMedia && text.startsWith("!")) {
+  // 1. Commands. Typed leads must use !lead by default so ordinary group chatter is
+  // not sent to the external AI service.
+  if (!hasMedia && text.startsWith("!") && !explicitTextLead) {
+    if (config.commandAdminJids.length && !config.commandAdminJids.includes(msg.senderId)) {
+      await chat.reply("⛔ This command is restricted to configured bot admins.", msg.id);
+      return;
+    }
     await handleCommand(text, msg, chat);
     return;
   }
@@ -87,10 +93,21 @@ export async function handleMessage(msg: IncomingMessage, chat: Chat): Promise<v
   }
 
   // 3. New message: does it contain a lead?
+  if (!hasMedia && !explicitTextLead && !config.processAllTextMessages) return;
+
+  const input: MessageInput = explicitTextLead
+    ? { ...msg.input, text: text.replace(/^!lead\b/i, "").trim() }
+    : msg.input;
+
+  if (!hasMedia && explicitTextLead && !input.text) {
+    await chat.reply("Usage: *!lead <name / company / phone / details>*", msg.id);
+    return;
+  }
+
   if (hasMedia) await chat.react(msg.id, "👀");
   let extraction: Extraction;
   try {
-    extraction = await extractLeads(msg.input);
+    extraction = await extractLeads(input);
   } catch (err) {
     console.error("extract failed", err);
     if (hasMedia) await chat.reply("⚠️ I couldn't read that one. Try a sharper photo or type the details.", msg.id);
@@ -106,7 +123,7 @@ export async function handleMessage(msg: IncomingMessage, chat: Chat): Promise<v
     return;
   }
 
-  const source = msg.input.images.length ? "Card photo" : msg.input.vcards.length ? "Shared contact" : "Typed";
+  const source = input.images.length ? "Card photo" : input.vcards.length ? "Shared contact" : "Typed";
   const names = extraction.leads.map(describe).join(", ");
 
   // Caption already carried context → no need to ask.
