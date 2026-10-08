@@ -3,8 +3,10 @@ import { config } from "./config.js";
 import { audit } from "./audit.js";
 import { opsSnapshot } from "./ops.js";
 import { cancelReminder, listReminders, parseDuration, scheduleReminder } from "./scheduler.js";
-import { leadSummary, rowLink, searchLeads } from "./sheets.js";
+import { appendActivity, leadSummary, pipelineSummary, rowLink, searchLeads, updateLeadFields } from "./sheets.js";
 import { searchHistory } from "./history.js";
+import { createBackup, listBackups } from "./backup.js";
+import { listRetries, resolveRetry } from "./retry.js";
 
 export interface CommandInput {
   sock: WASocket;
@@ -28,6 +30,9 @@ function helpText(): string {
   if (config.features.search) commands.push("*!search <query>* — search enabled data sources");
   if (config.features.digests) commands.push("*!digest* — operational/CRM summary");
   if (config.features.exports && config.features.leadCrm) commands.push("*!sheet* — open the configured CRM sheet");
+  if (config.features.pipeline && config.features.leadCrm) commands.push("*!pipeline* — pipeline summary", "*!assign <row> <owner>* — assign lead", "*!stage <row> <stage>* — update pipeline stage", "*!followup <row> <2d> [note]* — set follow-up + reminder");
+  if (config.features.backups) commands.push("*!backup* — create encrypted-state/config data backup", "*!backups* — list backups");
+  if (config.features.retryQueue) commands.push("*!retries* — list failed work", "*!retry-resolve <id>* — mark retry item resolved");
   if (config.features.leadCrm) commands.push("*!event <name>* / *!event off* — CRM event tagging");
   return `*${config.botDisplayName}*\n${config.appDescription}\n\n${commands.join("\n")}`;
 }
@@ -141,6 +146,90 @@ export async function handlePlatformCommand(input: CommandInput): Promise<boolea
         lines.push(`Leads: ${leads.total} · Hot ${leads.hot} · Warm ${leads.warm} · Cold ${leads.cold} · New ${leads.new}`);
       }
       await reply(input.sock, input.jid, input.message, lines.join("\n"));
+      return true;
+    }
+
+    case "pipeline": {
+      if (!config.features.pipeline || !config.features.leadCrm) return false;
+      const counts = await pipelineSummary();
+      const lines = Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([stage,count]) => `• ${stage}: ${count}`);
+      await reply(input.sock, input.jid, input.message, lines.length ? `*Pipeline*\n${lines.join("\n")}` : "Pipeline is empty.");
+      return true;
+    }
+
+    case "assign": {
+      if (!config.features.pipeline || !config.features.leadCrm) return false;
+      const [rowToken, ...ownerParts] = arg.split(/\s+/);
+      const row = Number(rowToken);
+      const owner = ownerParts.join(" ").trim();
+      if (!Number.isInteger(row) || row < 2 || !owner) {
+        await reply(input.sock, input.jid, input.message, "Usage: !assign <row> <owner>");
+        return true;
+      }
+      await updateLeadFields(row, { Owner: owner });
+      await appendActivity(row, `Assigned to ${owner} by ${input.senderName}`);
+      await reply(input.sock, input.jid, input.message, `Assigned CRM row ${row} to ${owner}.`);
+      return true;
+    }
+
+    case "stage": {
+      if (!config.features.pipeline || !config.features.leadCrm) return false;
+      const [rowToken, ...stageParts] = arg.split(/\s+/);
+      const row = Number(rowToken);
+      const stage = stageParts.join(" ").trim();
+      if (!Number.isInteger(row) || row < 2 || !stage) {
+        await reply(input.sock, input.jid, input.message, "Usage: !stage <row> <stage>");
+        return true;
+      }
+      await updateLeadFields(row, { "Pipeline Stage": stage });
+      await appendActivity(row, `Pipeline stage → ${stage} by ${input.senderName}`);
+      await reply(input.sock, input.jid, input.message, `CRM row ${row} moved to ${stage}.`);
+      return true;
+    }
+
+    case "followup": {
+      if (!config.features.pipeline || !config.features.leadCrm || !config.features.scheduler) return false;
+      const [rowToken, durationToken, ...noteParts] = arg.split(/\s+/);
+      const row = Number(rowToken);
+      const delayMs = parseDuration(durationToken ?? "");
+      if (!Number.isInteger(row) || row < 2 || !delayMs) {
+        await reply(input.sock, input.jid, input.message, "Usage: !followup <row> <30m|2h|3d|1w> [note]");
+        return true;
+      }
+      const dueAt = new Date(Date.now() + delayMs).toISOString();
+      const note = noteParts.join(" ").trim();
+      await updateLeadFields(row, { "Follow-up Due": dueAt });
+      await appendActivity(row, `Follow-up set for ${dueAt}${note ? `: ${note}` : ""}`);
+      const job = scheduleReminder(input.jid, input.sender, delayMs, `CRM row ${row} follow-up${note ? `: ${note}` : ""}`);
+      await reply(input.sock, input.jid, input.message, `Follow-up set for row ${row} at ${dueAt} (reminder ${job.id}).`);
+      return true;
+    }
+
+    case "backup": {
+      if (!config.features.backups) return false;
+      const path = createBackup();
+      await reply(input.sock, input.jid, input.message, `Backup created: ${path.split("/").pop()}`);
+      return true;
+    }
+
+    case "backups": {
+      if (!config.features.backups) return false;
+      const items = listBackups();
+      await reply(input.sock, input.jid, input.message, items.length ? items.join("\n") : "No backups yet.");
+      return true;
+    }
+
+    case "retries": {
+      if (!config.features.retryQueue) return false;
+      const items = listRetries();
+      await reply(input.sock, input.jid, input.message, items.length ? items.slice(0,10).map((x)=>`${x.id} · ${x.type} · ${x.error}`).join("\n") : "Retry queue is empty.");
+      return true;
+    }
+
+    case "retry-resolve": {
+      if (!config.features.retryQueue) return false;
+      const ok = resolveRetry(arg);
+      await reply(input.sock, input.jid, input.message, ok ? `Resolved retry ${arg}.` : `Retry ${arg} not found.`);
       return true;
     }
 
