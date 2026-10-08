@@ -261,3 +261,64 @@ export async function pipelineSummary(): Promise<Record<string, number>> {
   }
   return counts;
 }
+
+
+export interface LeadFilters {
+  q?: string;
+  priority?: string;
+  status?: string;
+  stage?: string;
+  owner?: string;
+  event?: string;
+}
+
+export async function listLeads(filters: LeadFilters = {}, limit = 200): Promise<LeadRow[]> {
+  const rows = await readLeadRows();
+  const max = Math.max(1, Math.min(limit, 500));
+  const normalized = Object.fromEntries(
+    Object.entries(filters).map(([k,v]) => [k, v?.trim().toLowerCase() || ""])
+  ) as Record<string, string>;
+  const out: LeadRow[] = [];
+  for (const row of rows) {
+    const item = rowObject(row);
+    const text = Object.values(item).join(" ").toLowerCase();
+    if (normalized.q && !text.includes(normalized.q)) continue;
+    if (normalized.priority && String(item.Priority ?? "").toLowerCase() !== normalized.priority) continue;
+    if (normalized.status && String(item.Status ?? "").toLowerCase() !== normalized.status) continue;
+    if (normalized.stage && String(item["Pipeline Stage"] ?? "").toLowerCase() !== normalized.stage) continue;
+    if (normalized.owner && !String(item.Owner ?? "").toLowerCase().includes(normalized.owner)) continue;
+    if (normalized.event && !String(item["Event / Where Met"] ?? "").toLowerCase().includes(normalized.event)) continue;
+    out.push(item);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+export async function followupAging(): Promise<{ overdue: number; today: number; upcoming: number; noDue: number }> {
+  const rows = await readLeadRows();
+  const dueIndex = HEADERS.indexOf("Follow-up Due");
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const endToday = startToday + 86_400_000;
+  let overdue = 0, today = 0, upcoming = 0, noDue = 0;
+  for (const row of rows) {
+    const raw = String(row[dueIndex] ?? "").trim();
+    if (!raw) { noDue++; continue; }
+    const due = Date.parse(raw);
+    if (!Number.isFinite(due)) { noDue++; continue; }
+    if (due < startToday) overdue++;
+    else if (due < endToday) today++;
+    else upcoming++;
+  }
+  return { overdue, today, upcoming, noDue };
+}
+
+function csvCell(value: unknown): string {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+export async function exportLeadsCsv(): Promise<string> {
+  const rows = await readLeadRows();
+  return [[...HEADERS], ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
