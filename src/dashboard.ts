@@ -4,6 +4,8 @@ import { readFile } from "node:fs/promises";
 import { config } from "./config.js";
 import { opsSnapshot, prometheusMetrics } from "./ops.js";
 import { leadSummary, searchLeads } from "./sheets.js";
+import { historyStats, searchHistory } from "./history.js";
+import { listReminders } from "./scheduler.js";
 
 function unauthorized(res: ServerResponse): void {
   res.writeHead(401, {
@@ -66,7 +68,7 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>WA-ABN Ops</title>
+<title>${config.appName} Ops</title>
 <style>
 :root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#111827;background:#f3f4f6}
 body{margin:0;padding:24px}.wrap{max-width:1200px;margin:auto}
@@ -80,9 +82,9 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 </style>
 </head>
 <body><div class="wrap">
-<h1>WA-ABN Ops</h1><div class="sub">Read-only operational dashboard</div>
+<h1>${config.appName} Ops</h1><div class="sub">${config.appDescription}</div>
 <div id="cards" class="grid"></div>
-<section class="card"><h3>Lead search</h3><input id="q" placeholder="Search name, company, email, phone, event, status…"><div id="leads"></div></section>
+<section class="card"><h3>Search</h3><input id="q" placeholder="Search CRM/history…"><div id="leads"></div></section>
 <section class="card"><h3>Recent security events</h3><div id="audit"></div></section>
 </div>
 <script>
@@ -93,13 +95,13 @@ async function refresh(){
  const c=s.runtime.counters;
  document.getElementById("cards").innerHTML=[
  ["WhatsApp",s.runtime.connection],["Uptime",Math.floor(s.runtime.uptimeSeconds/60)+" min"],
- ["Leads",s.leads.total],["Hot",s.leads.hot],["Warm",s.leads.warm],
+ ["Leads",s.leads?s.leads.total:"Off"],["Hot",s.leads?s.leads.hot:"—"],["Warm",s.leads?s.leads.warm:"—"],
  ["Processed",c.messagesProcessed],["Rejected",c.senderRejected],["Rate limited",c.rateLimited],
  ["Pending",s.runtime.pendingLeads],["Event",s.runtime.currentEvent||"None"]
  ].map(([k,v])=>"<div class=\"card\"><div class=\"k\">"+esc(k)+"</div><div class=\"v\">"+esc(v)+"</div></div>").join("");
  document.getElementById("audit").innerHTML="<table><tr><th>Time</th><th>Event</th><th>Details</th></tr>"+a.map(x=>"<tr><td>"+esc(x.ts)+"</td><td>"+esc(x.event)+"</td><td><pre>"+esc(JSON.stringify(x,null,2))+"</pre></td></tr>").join("")+"</table>";
 }
-let t;document.getElementById("q").addEventListener("input",e=>{clearTimeout(t);t=setTimeout(async()=>{const q=e.target.value.trim();if(!q){document.getElementById("leads").innerHTML="";return}const rows=await get("/api/leads?q="+encodeURIComponent(q));document.getElementById("leads").innerHTML="<table><tr><th>Name</th><th>Company</th><th>Priority</th><th>Status</th><th>Captured</th></tr>"+rows.map(r=>"<tr><td>"+esc(r["Full Name"])+"</td><td>"+esc(r.Company)+"</td><td>"+esc(r.Priority)+"</td><td>"+esc(r.Status)+"</td><td>"+esc(r["Captured At"])+"</td></tr>").join("")+"</table>"},250)});
+let t;document.getElementById("q").addEventListener("input",e=>{clearTimeout(t);t=setTimeout(async()=>{const q=e.target.value.trim();if(!q){document.getElementById("leads").innerHTML="";return}const rows=await get("/api/search?q="+encodeURIComponent(q));document.getElementById("leads").innerHTML="<pre>"+esc(JSON.stringify(rows,null,2))+"</pre>"},250)});
 refresh();setInterval(refresh,15000);
 </script></body></html>`;
 
@@ -134,7 +136,7 @@ export function startOpsDashboard(): void {
         return;
       }
       if (url.pathname === "/api/status") {
-        json(res, { runtime: opsSnapshot(), leads: await leadSummary() });
+        json(res, { runtime: opsSnapshot(), features: config.features, leads: config.features.leadCrm ? await leadSummary() : null, history: historyStats(), reminders: listReminders().length });
         return;
       }
       if (url.pathname === "/api/audit") {
@@ -144,7 +146,15 @@ export function startOpsDashboard(): void {
       }
       if (url.pathname === "/api/leads") {
         const query = (url.searchParams.get("q") ?? "").trim();
-        json(res, query ? await searchLeads(query, 50) : []);
+        json(res, config.features.leadCrm && query ? await searchLeads(query, 50) : []);
+        return;
+      }
+      if (url.pathname === "/api/search") {
+        const query = (url.searchParams.get("q") ?? "").trim();
+        json(res, {
+          crm: config.features.leadCrm && query ? await searchLeads(query, 25) : [],
+          history: config.features.messageHistory && query ? searchHistory(query, 25) : [],
+        });
         return;
       }
       if (url.pathname === "/metrics") {
