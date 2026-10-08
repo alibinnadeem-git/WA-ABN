@@ -1,7 +1,7 @@
 {
-  "name": "stratum-leads-bot",
-  "version": "1.0.0",
-  "description": "",
+  "name": "wa-abn-platform",
+  "version": "2.0.0",
+  "description": "Secure modular WhatsApp automation platform with optional CRM, AI, scheduling, dashboard and integrations",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -14,7 +14,7 @@
     "type": "git",
     "url": "git+https://github.com/alibinnadeem-git/WA-ABN.git"
   },
-  "keywords": [],
+  "keywords": ["whatsapp","automation","baileys","crm","bot","dashboard","workflow"],
   "author": "",
   "license": "ISC",
   "type": "module",
