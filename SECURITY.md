@@ -1,6 +1,6 @@
 # WA-ABN Security Baseline
 
-WA-ABN is intentionally a small, single-purpose WhatsApp group lead-capture bot. Its security model is **minimum attack surface**: no dashboard, no public HTTP API, no Socket.IO server, no user registration, no webhook receiver, no updater, and no author telemetry.
+WA-ABN is intentionally a small, single-purpose WhatsApp group lead-capture bot. Its security model is **minimum attack surface**. An optional read-only localhost Ops Dashboard is available, but there is no general WhatsApp HTTP send API, Socket.IO server, user registration, webhook receiver, updater, or author telemetry.
 
 ## Threat model
 
@@ -31,12 +31,12 @@ Primary threats:
 - **Append-only security audit.** Security-relevant local events are written as JSONL to `DATA_DIR/security-audit.jsonl`.
 - **No runtime WhatsApp-version fetch.** The application uses the reviewed Baileys dependency from the lockfile instead of dynamically selecting a version at startup.
 - **Non-root container.** Production runs as the official Node image's unprivileged `node` user.
-- **No inbound network listener.** WA-ABN does not expose an application port.
+- **No general inbound API.** The optional Ops Dashboard is disabled by default, binds to `127.0.0.1`, requires a minimum-32-character token, and exposes read-only status/search/audit/metrics functionality.
 - **Spreadsheet formula-injection defense.** Untrusted lead values beginning with formula sigils are escaped before insertion.
 
 ## Controls from the WA-AKG audit that are intentionally not present
 
-The following attack surfaces do not exist in WA-ABN and should remain absent unless a future design explicitly requires them:
+The following high-risk attack surfaces do not exist in WA-ABN and should remain absent unless a future design explicitly requires them:
 - Socket.IO handshake / arbitrary room joins
 - CORS policy
 - public registration / RBAC
@@ -101,3 +101,18 @@ The repository includes:
 - Dependabot
 
 A dependency/SAST alert is not automatically proof of exploitability, but high/critical findings must be reviewed before production deployment.
+
+
+## Ops Dashboard threat model
+
+When `OPS_DASHBOARD_ENABLED=true`:
+- authentication is HTTP Basic with a timing-safe token comparison;
+- username is fixed as `admin`; the secret is the dashboard token;
+- dashboard token must be at least 32 characters;
+- default bind address is `127.0.0.1`;
+- responses use `Cache-Control: no-store`, CSP, frame denial, no-referrer, and MIME-sniffing protections;
+- the UI is read-only and has no message-send or credential-management endpoint;
+- `/healthz` returns only `ok` and intentionally exposes no operational data;
+- `/metrics`, lead search and audit events require authentication.
+
+If binding to `0.0.0.0` for container access, publish the port on host loopback only or put it behind an authenticated private network/reverse proxy. Never expose the dashboard directly to the public Internet.

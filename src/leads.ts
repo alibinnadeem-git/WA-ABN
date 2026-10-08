@@ -3,6 +3,7 @@ import { enrichLead, extractLeads, type Extraction, type Lead, type MessageInput
 import { config } from "./config.js";
 import { audit } from "./audit.js";
 import { appendLead, appendNoteToRow, findDuplicate, rowLink } from "./sheets.js";
+import { increment, setCurrentEvent, setPendingLeads } from "./ops.js";
 
 /** What the WhatsApp layer hands us for each group message. */
 export interface IncomingMessage {
@@ -45,6 +46,7 @@ function loadState(): State {
   }
 }
 const state = loadState();
+setCurrentEvent(state.event);
 const saveState = () => fs.writeFileSync(config.statePath, JSON.stringify(state, null, 2));
 
 const SKIP_WORDS = /^(skip|no|none|nope|n\/a|na|nothing|-)$/i;
@@ -136,6 +138,7 @@ export async function handleMessage(msg: IncomingMessage, chat: Chat): Promise<v
   };
   pendingByPrompt.set(pending.promptId, pending);
   pendingBySender.set(pending.senderId, pending);
+  setPendingLeads(pendingByPrompt.size);
 }
 
 async function finalize(pending: Pending, chat: Chat): Promise<void> {
@@ -143,6 +146,7 @@ async function finalize(pending: Pending, chat: Chat): Promise<void> {
   if (pendingByPrompt.get(pending.promptId) !== pending) return;
   clearTimeout(pending.timer);
   pendingByPrompt.delete(pending.promptId);
+  setPendingLeads(pendingByPrompt.size);
   if (pendingBySender.get(pending.senderId) === pending) pendingBySender.delete(pending.senderId);
 
   await processLeads(pending.extraction, pending.notes, pending.senderName, pending.source, pending.sourceMessageId, chat);
@@ -183,6 +187,7 @@ async function saveLead(
 
   const dupRow = await findDuplicate(lead.emails, lead.phones);
   if (dupRow) {
+    increment("duplicateLeads");
     await appendNoteToRow(dupRow, `[${stamp}] ${addedBy}${event ? ` @ ${event}` : ""}: ${teamNotes ?? "met again"}`);
     return `♻️ ${describe(lead)} is already in the sheet (row ${dupRow}) — I added your note there.\n${rowLink(dupRow)}`;
   }
@@ -222,6 +227,7 @@ async function saveLead(
     Status: "New",
   });
 
+  increment("leadsSaved");
   const name = e?.full_name ?? lead.full_name ?? "Unknown";
   const role = [e?.job_title ?? lead.job_title, e?.company ?? lead.company].filter(Boolean).join(" @ ");
   const firmo = [e?.industry, e?.company_size && `${e.company_size} staff`, e?.hq_location].filter(Boolean).join(" · ");
@@ -253,6 +259,7 @@ async function handleCommand(text: string, msg: IncomingMessage, chat: Chat): Pr
       }
       state.event = /^(off|clear|none)$/i.test(arg) ? null : arg;
       saveState();
+      setCurrentEvent(state.event);
       audit("command.event_changed", { sender: msg.senderId, event: state.event });
       await chat.reply(state.event ? `📍 New leads will be tagged *${state.event}*.` : "📍 Event tag cleared.", msg.id);
       break;

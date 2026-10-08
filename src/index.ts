@@ -14,6 +14,8 @@ import { useEncryptedAuthState } from "./auth-state.js";
 import { handleMessage, type Chat, type IncomingMessage } from "./leads.js";
 import type { MessageInput } from "./ai.js";
 import { ensureSheet } from "./sheets.js";
+import { increment, setConnection } from "./ops.js";
+import { startOpsDashboard } from "./dashboard.js";
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? "warn" });
 const seen = new Set<string>();
@@ -90,6 +92,7 @@ async function start(): Promise<void> {
       qrcode.generate(qr, { small: true });
     }
     if (connection === "open") {
+      setConnection("connected");
       audit("whatsapp.connected");
       console.log("✅ Connected to WhatsApp.");
       if (!config.groupJid) {
@@ -98,6 +101,7 @@ async function start(): Promise<void> {
     }
     if (connection === "close") {
       const status = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
+      setConnection("disconnected");
       audit("whatsapp.disconnected", { status: status ?? null });
       if (status === DisconnectReason.loggedOut) {
         console.error(`Logged out. Delete ${config.authDir} and restart to link again.`);
@@ -120,6 +124,7 @@ async function start(): Promise<void> {
         await onMessage(sock, m);
       } catch (err) {
         console.error("Failed to handle message", err);
+        increment("handlerErrors");
         audit("message.handler_error", { message: err instanceof Error ? err.message : "unknown" });
       }
     }
@@ -127,6 +132,7 @@ async function start(): Promise<void> {
 }
 
 async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
+  increment("messagesSeen");
   const jid = m.key.remoteJid;
   const id = m.key.id;
   if (!jid?.endsWith("@g.us") || !id || m.key.fromMe || !m.message) return;
@@ -143,10 +149,12 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
 
   const sender = m.key.participant ?? jid;
   if (!senderAllowed(sender)) {
+    increment("senderRejected");
     audit("message.sender_rejected", { sender, group: jid });
     return;
   }
   if (rateLimited(sender)) {
+    increment("rateLimited");
     audit("message.rate_limited", { sender, group: jid });
     return;
   }
@@ -177,12 +185,14 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
     if (SUPPORTED_IMAGE_TYPES.includes(mime)) {
       const declaredSize = Number(media.fileLength ?? 0);
       if (declaredSize > config.maxImageBytes) {
+        increment("mediaRejected");
         audit("message.media_rejected_size", { sender, bytes: declaredSize });
         await sock.sendMessage(jid, { text: "⚠️ Image is too large for the secure processing limit." }, { quoted: m });
         return;
       }
       const data = await downloadMediaMessage(m, "buffer", {}, { logger, reuploadRequest: sock.updateMediaMessage });
       if (data.length > config.maxImageBytes) {
+        increment("mediaRejected");
         audit("message.media_rejected_size", { sender, bytes: data.length });
         await sock.sendMessage(jid, { text: "⚠️ Image is too large for the secure processing limit." }, { quoted: m });
         return;
@@ -205,6 +215,7 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
     input,
     quotedId,
   };
+  increment("messagesProcessed");
   await handleMessage(incoming, makeChat(sock, jid));
 }
 
@@ -212,6 +223,7 @@ audit("process.start", {
   groupConfigured: Boolean(config.groupJid),
   senderAllowlistConfigured: config.allowedSenderJids.size > 0,
 });
+startOpsDashboard();
 await ensureSheet();
 console.log(`📄 Google Sheet ready (tab "${config.sheetTab}").`);
 await start();
