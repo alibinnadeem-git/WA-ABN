@@ -25,6 +25,12 @@ function loadServiceAccount(): Record<string, string> {
   return JSON.parse(Buffer.from(raw, "base64").toString("utf8"));
 }
 
+function bool(name: string, fallback = false): boolean {
+  const value = process.env[name];
+  if (value == null || value === "") return fallback;
+  return /^(1|true|yes|on)$/i.test(value);
+}
+
 function csv(name: string): Set<string> {
   return new Set(
     (process.env[name] ?? "")
@@ -43,6 +49,12 @@ export const config = {
   authDir: path.join(dataDir, "wa-auth"),
   statePath: path.join(dataDir, "state.json"),
   auditPath: path.join(dataDir, "security-audit.jsonl"),
+
+  // Optional read-only operations dashboard. Localhost by default.
+  opsDashboardEnabled: bool("OPS_DASHBOARD_ENABLED", false),
+  opsDashboardHost: process.env.OPS_DASHBOARD_HOST || "127.0.0.1",
+  opsDashboardPort: Math.max(1, Math.min(65535, Number(process.env.OPS_DASHBOARD_PORT ?? 8787))),
+  opsDashboardToken: process.env.OPS_DASHBOARD_TOKEN || "",
 
   // WhatsApp trust boundary
   groupJid: process.env.WA_GROUP_JID || null,
@@ -65,3 +77,8 @@ export const config = {
   sheetTab: process.env.GOOGLE_SHEET_TAB || "Leads",
   serviceAccount: loadServiceAccount(),
 };
+
+
+if (config.opsDashboardEnabled && config.opsDashboardToken.length < 32) {
+  throw new Error("OPS_DASHBOARD_TOKEN must be at least 32 characters when the dashboard is enabled");
+}
