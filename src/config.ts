@@ -114,6 +114,7 @@ export const config = {
   // History/privacy
   historyMaxTextChars: Math.max(0, Math.min(20_000, Number(process.env.HISTORY_MAX_TEXT_CHARS ?? 2000))),
   historyRetentionDays: Math.max(1, Number(process.env.HISTORY_RETENTION_DAYS ?? 30)),
+  autoDigestEveryHours: Math.max(0, Number(process.env.AUTO_DIGEST_EVERY_HOURS ?? 0)),
 
   // Optional outbound workflow integration (n8n/automation). Disabled by default.
   outboundWebhookUrl: optional("OUTBOUND_WEBHOOK_URL"),
