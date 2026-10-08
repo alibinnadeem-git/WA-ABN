@@ -1,6 +1,6 @@
 # WA-ABN Security Baseline
 
-WA-ABN is intentionally a small, single-purpose WhatsApp group lead-capture bot. Its security model is **minimum attack surface**. An optional read-only localhost Ops Dashboard is available, but there is no general WhatsApp HTTP send API, Socket.IO server, user registration, webhook receiver, updater, or author telemetry.
+WA-ABN is a reusable WhatsApp automation platform with a **minimum-necessary attack surface**. Features are modular and should be enabled only when a deployment needs them. The optional Ops Dashboard is read-only and localhost-bound by default; the core still provides no public arbitrary-message send API, remote shell, self-updater, or author telemetry.
 
 ## Threat model
 
@@ -9,7 +9,8 @@ Tier-1 secrets:
 - `WA_AUTH_ENCRYPTION_KEY`
 - `ANTHROPIC_API_KEY`
 - Google service-account credentials
-- Google Sheet identifiers and lead data
+- application data (for example CRM/lead data when that module is enabled)
+- dashboard and outbound-integration credentials
 
 Primary threats:
 1. Theft of WhatsApp linked-device state from disk or backups.
@@ -24,14 +25,17 @@ Primary threats:
 - **No phone-home telemetry.** There is no Aikeigroup/author heartbeat or analytics endpoint.
 - **Encrypted Baileys auth state.** All Baileys credential/key files are AES-256-GCM encrypted at rest with per-file random nonces and authenticated associated data.
 - **Plaintext migration.** Existing Baileys multi-file auth state is read once and rewritten encrypted.
-- **Strict group boundary.** Only `WA_GROUP_JID` is processed.
+- **Strict group boundary.** Only groups in `WA_ALLOWED_GROUP_JIDS` (or legacy `WA_GROUP_JID`) are processed.
 - **Optional participant allowlist.** `WA_ALLOWED_SENDER_JIDS` can restrict processing to named participants.
 - **Inbound rate limiting.** Per-sender message processing is capped by `MAX_MESSAGES_PER_MINUTE`.
 - **Media limits.** Images larger than `MAX_IMAGE_BYTES` are rejected before AI processing when size is known and again after download.
 - **Append-only security audit.** Security-relevant local events are written as JSONL to `DATA_DIR/security-audit.jsonl`.
 - **No runtime WhatsApp-version fetch.** The application uses the reviewed Baileys dependency from the lockfile instead of dynamically selecting a version at startup.
 - **Non-root container.** Production runs as the official Node image's unprivileged `node` user.
-- **No general inbound API.** The optional Ops Dashboard is disabled by default, binds to `127.0.0.1`, requires a minimum-32-character token, and exposes read-only status/search/audit/metrics functionality.
+- **No general inbound send API.** The optional Ops Dashboard is disabled by default, binds to `127.0.0.1`, requires a minimum-32-character token, and exposes read-only status/search/audit/metrics functionality.
+- **Session isolation.** `WA_SESSION_ID` namespaces credentials, state, history, scheduler jobs and audit logs for separate deployments using the same repository.
+- **Safe outbound integration hook.** Optional webhooks require HTTPS, reject redirects/private addresses, and can require an explicit hostname allowlist.
+- **Retry/backup modules.** Persisted failed work and backups remain inside the deployment data boundary; WhatsApp auth files remain encrypted.
 - **Spreadsheet formula-injection defense.** Untrusted lead values beginning with formula sigils are escaped before insertion.
 
 ## Controls from the WA-AKG audit that are intentionally not present
@@ -41,7 +45,7 @@ The following high-risk attack surfaces do not exist in WA-ABN and should remain
 - CORS policy
 - public registration / RBAC
 - API-key generation and storage
-- webhook URL fetching / SSRF surface
+- arbitrary/unrestricted webhook URL fetching
 - shell `exec()`
 - database service exposed to the network
 - web authentication endpoints
@@ -73,7 +77,7 @@ docker run -d --restart unless-stopped \
   --security-opt=no-new-privileges:true \
   --tmpfs /tmp:rw,noexec,nosuid,size=64m \
   --env-file .env \
-  -v stratum-bot-data:/data \
+  -v wa-abn-data:/data \
   wa-abn
 ```
 
@@ -116,3 +120,28 @@ When `OPS_DASHBOARD_ENABLED=true`:
 - `/metrics`, lead search and audit events require authentication.
 
 If binding to `0.0.0.0` for container access, publish the port on host loopback only or put it behind an authenticated private network/reverse proxy. Never expose the dashboard directly to the public Internet.
+
+
+## Profile and module isolation
+
+Project profiles are configuration, not forks. A profile should not weaken the core trust boundary. Review any profile that:
+- enables message history;
+- enables outbound webhooks;
+- broadens authorized groups or senders;
+- exposes the Ops Dashboard beyond localhost;
+- adds a new write-capable HTTP API;
+- adds bulk messaging or group-administration capabilities.
+
+Run separate process/container instances with distinct `WA_SESSION_ID` values for unrelated WhatsApp accounts. This keeps credentials and operational state isolated even though every deployment uses the same repository.
+
+## Outbound webhook controls
+
+`FEATURE_WEBHOOKS` is disabled by default. When enabled, WA-ABN:
+- requires HTTPS;
+- rejects redirects;
+- resolves the hostname before use;
+- blocks loopback, RFC1918/private and link-local destinations;
+- can require an explicit `WEBHOOK_ALLOWED_HOSTS` allowlist;
+- never uses the webhook response as executable code.
+
+This module is intended for trusted workflow systems such as an organization's own n8n instance, not arbitrary user-supplied destinations.
