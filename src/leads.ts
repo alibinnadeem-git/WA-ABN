@@ -4,6 +4,8 @@ import { config } from "./config.js";
 import { audit } from "./audit.js";
 import { appendLead, appendNoteToRow, findDuplicate, rowLink } from "./sheets.js";
 import { increment, setCurrentEvent, setPendingLeads } from "./ops.js";
+import { enqueueRetry } from "./retry.js";
+import { emitIntegrationEvent } from "./integrations.js";
 
 /** What the WhatsApp layer hands us for each group message. */
 export interface IncomingMessage {
@@ -169,6 +171,7 @@ async function processLeads(
   const results = await Promise.all(
     extraction.leads.map((lead) => saveLead(lead, teamNotes, event, addedBy, source).catch((err: unknown) => {
       console.error("saveLead failed", err);
+      if (config.features.retryQueue) enqueueRetry("lead.save", { lead, teamNotes, event, addedBy, source }, err);
       return `⚠️ ${describe(lead)}: saved nothing — ${err instanceof Error ? err.message : "unknown error"}`;
     })),
   );
@@ -189,6 +192,7 @@ async function saveLead(
   if (dupRow) {
     increment("duplicateLeads");
     await appendNoteToRow(dupRow, `[${stamp}] ${addedBy}${event ? ` @ ${event}` : ""}: ${teamNotes ?? "met again"}`);
+    void emitIntegrationEvent("lead.duplicate", { row: dupRow, lead, event, addedBy }).catch((err) => console.error("integration failed", err));
     return `♻️ ${describe(lead)} is already in the sheet (row ${dupRow}) — I added your note there.\n${rowLink(dupRow)}`;
   }
 
@@ -225,9 +229,13 @@ async function saveLead(
     "Enrichment Confidence": e?.confidence ?? "Not enriched",
     Sources: e?.sources.join("\n") ?? "",
     Status: "New",
+    "Last Activity": new Date().toISOString(),
+    "Pipeline Stage": "New",
+    "Activity Timeline": `[${new Date().toISOString()}] Lead captured by ${addedBy}`,
   });
 
   increment("leadsSaved");
+  void emitIntegrationEvent("lead.created", { row, lead, event, addedBy, source }).catch((err) => console.error("integration failed", err));
   const name = e?.full_name ?? lead.full_name ?? "Unknown";
   const role = [e?.job_title ?? lead.job_title, e?.company ?? lead.company].filter(Boolean).join(" @ ");
   const firmo = [e?.industry, e?.company_size && `${e.company_size} staff`, e?.hq_location].filter(Boolean).join(" · ");
