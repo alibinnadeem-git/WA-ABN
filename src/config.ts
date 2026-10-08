@@ -89,6 +89,10 @@ export const config = {
     search: bool("FEATURE_SEARCH", true),
     digests: bool("FEATURE_DIGESTS", true),
     exports: bool("FEATURE_EXPORTS", true),
+    pipeline: bool("FEATURE_PIPELINE", true),
+    backups: bool("FEATURE_BACKUPS", true),
+    retryQueue: bool("FEATURE_RETRY_QUEUE", true),
+    webhooks: bool("FEATURE_WEBHOOKS", false),
   },
 
   // Optional read-only operations dashboard. Localhost by default.
@@ -110,6 +114,11 @@ export const config = {
   // History/privacy
   historyMaxTextChars: Math.max(0, Math.min(20_000, Number(process.env.HISTORY_MAX_TEXT_CHARS ?? 2000))),
   historyRetentionDays: Math.max(1, Number(process.env.HISTORY_RETENTION_DAYS ?? 30)),
+
+  // Optional outbound workflow integration (n8n/automation). Disabled by default.
+  outboundWebhookUrl: optional("OUTBOUND_WEBHOOK_URL"),
+  outboundWebhookToken: optional("OUTBOUND_WEBHOOK_TOKEN"),
+  webhookAllowedHosts: csv("WEBHOOK_ALLOWED_HOSTS"),
 
   // AI
   model: process.env.CLAUDE_MODEL || "claude-opus-5-5",
