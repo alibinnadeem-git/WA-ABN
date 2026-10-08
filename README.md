@@ -85,3 +85,28 @@ Mount `/data` as a persistent volume. If it is lost, you'll have to re-link What
 - Each lead uses two Claude calls (extraction + enrichment with up to ~10 web searches/fetches). Plain-text group chatter also goes through a short extraction call so the bot can tell whether it's a lead. If the group is chatty, consider a dedicated leads-only group.
 - If web enrichment fails, the lead is still saved with the card details. The row's Enrichment Confidence is set to "Not enriched".
 - A lead waiting for context lives in memory. If the bot restarts within those 2 minutes, re-post that card.
+
+
+## Security hardening
+
+This repository intentionally does **not** inherit WA-AKG's large API/dashboard attack surface or its external heartbeat/telemetry mechanism. WA-ABN is kept narrow: it processes one explicitly allowed WhatsApp group and writes lead data to the configured Google Sheet.
+
+Security-sensitive defaults:
+
+- WhatsApp/Baileys session files are encrypted with **AES-256-GCM** using `WA_AUTH_ENCRYPTION_KEY`.
+- Group discovery is **off by default**. Enable `WA_ALLOW_GROUP_DISCOVERY=true` temporarily only when discovering the group JID.
+- Existing plaintext Baileys auth files are rejected unless `WA_ALLOW_PLAINTEXT_AUTH_MIGRATION=true` is deliberately enabled for a one-time migration.
+- Image/media inputs are limited by `WA_MAX_MEDIA_BYTES` (10 MiB by default).
+- The Docker runtime uses the unprivileged `node` account.
+- CI runs TypeScript validation, `npm audit`, CodeQL, and Dependabot dependency monitoring.
+- No WA-AKG/Aikeigroup heartbeat or application telemetry endpoint is present.
+
+Generate the WhatsApp auth-state encryption key with:
+
+```bash
+openssl rand -base64 32
+```
+
+Keep that value in your deployment secret manager. Do not store it in the repository or on the same persistent volume as `DATA_DIR`.
+
+See [SECURITY.md](./SECURITY.md) for migration and operational guidance.

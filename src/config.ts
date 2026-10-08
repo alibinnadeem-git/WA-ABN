@@ -7,16 +7,29 @@ function required(name: string): string {
   return value;
 }
 
+function envTrue(name: string): boolean {
+  return process.env[name]?.trim().toLowerCase() === "true";
+}
+
 function loadServiceAccount(): Record<string, string> {
   const raw = required("GOOGLE_SERVICE_ACCOUNT_JSON").trim();
-  // Accept inline JSON, base64-encoded JSON, or a path to the key file.
   if (raw.startsWith("{")) return JSON.parse(raw);
   if (fs.existsSync(raw)) return JSON.parse(fs.readFileSync(raw, "utf8"));
   return JSON.parse(Buffer.from(raw, "base64").toString("utf8"));
 }
 
 const dataDir = path.resolve(process.env.DATA_DIR ?? "./data");
-fs.mkdirSync(dataDir, { recursive: true });
+fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+try {
+  fs.chmodSync(dataDir, 0o700);
+} catch {
+  // Some development filesystems do not support POSIX modes.
+}
+
+const maxMediaBytes = Number(process.env.WA_MAX_MEDIA_BYTES ?? 10 * 1024 * 1024);
+if (!Number.isFinite(maxMediaBytes) || maxMediaBytes <= 0) {
+  throw new Error("WA_MAX_MEDIA_BYTES must be a positive number");
+}
 
 export const config = {
   dataDir,
@@ -26,6 +39,10 @@ export const config = {
   // WhatsApp
   groupJid: process.env.WA_GROUP_JID || null,
   pairingNumber: process.env.WA_PAIRING_NUMBER || null,
+  allowGroupDiscovery: envTrue("WA_ALLOW_GROUP_DISCOVERY"),
+  allowPlaintextAuthMigration: envTrue("WA_ALLOW_PLAINTEXT_AUTH_MIGRATION"),
+  authEncryptionKey: required("WA_AUTH_ENCRYPTION_KEY"),
+  maxMediaBytes,
   contextWaitMs: Number(process.env.CONTEXT_WAIT_SECONDS ?? 120) * 1000,
 
   // Claude
