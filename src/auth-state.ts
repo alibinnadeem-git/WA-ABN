@@ -53,27 +53,29 @@ function encryptJson(value: unknown, key: Buffer, file: string): string {
   return JSON.stringify(envelope);
 }
 
-function decryptJson(raw: string, key: Buffer, file: string): unknown {
-  const parsed = JSON.parse(raw) as Partial<Envelope> | unknown;
-  if (
-    typeof parsed === "object" &&
-    parsed !== null &&
-    (parsed as Partial<Envelope>).v === 1 &&
-    (parsed as Partial<Envelope>).alg === "aes-256-gcm"
-  ) {
-    const envelope = parsed as Envelope;
-    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(envelope.iv, "base64"));
-    decipher.setAAD(aad(file));
-    decipher.setAuthTag(Buffer.from(envelope.tag, "base64"));
-    const plaintext = Buffer.concat([
-      decipher.update(Buffer.from(envelope.data, "base64")),
-      decipher.final(),
-    ]).toString("utf8");
-    return JSON.parse(plaintext, BufferJSON.reviver);
+function isEnvelope(value: unknown): value is Envelope {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as Partial<Envelope>).v === 1 &&
+    (value as Partial<Envelope>).alg === "aes-256-gcm"
+  );
+}
+
+function decryptOrParse(raw: string, key: Buffer, file: string): { value: unknown; encrypted: boolean } {
+  const parsed = JSON.parse(raw) as unknown;
+  if (!isEnvelope(parsed)) {
+    return { value: JSON.parse(raw, BufferJSON.reviver), encrypted: false };
   }
 
-  // One-time migration path from Baileys' plaintext multi-file auth state.
-  return JSON.parse(raw, BufferJSON.reviver);
+  const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(parsed.iv, "base64"));
+  decipher.setAAD(aad(file));
+  decipher.setAuthTag(Buffer.from(parsed.tag, "base64"));
+  const plaintext = Buffer.concat([
+    decipher.update(Buffer.from(parsed.data, "base64")),
+    decipher.final(),
+  ]).toString("utf8");
+  return { value: JSON.parse(plaintext, BufferJSON.reviver), encrypted: true };
 }
 
 /**
@@ -101,18 +103,21 @@ export async function useEncryptedAuthState(
 
   const readData = async (file: string): Promise<unknown | null> => {
     const filePath = join(folder, fixFileName(file)!);
+    let decoded: { value: unknown; encrypted: boolean };
     try {
-      return await withFileLock(filePath, async () => {
+      decoded = await withFileLock(filePath, async () => {
         const raw = await readFile(filePath, "utf8");
-        const encrypted = raw.includes('"alg":"aes-256-gcm"') || raw.includes('"alg": "aes-256-gcm"');
-        const value = decryptJson(raw, key, file);
-        if (!encrypted) await writeData(value, file);
-        return value;
+        return decryptOrParse(raw, key, file);
       });
     } catch (error: any) {
       if (error?.code === "ENOENT") return null;
       throw error;
     }
+
+    if (!decoded.encrypted) {
+      await writeData(decoded.value, file);
+    }
+    return decoded.value;
   };
 
   const removeData = async (file: string): Promise<void> => {
@@ -138,22 +143,22 @@ export async function useEncryptedAuthState(
       creds,
       keys: {
         get: async (type, ids) => {
-          const data: { [id: string]: SignalDataTypeMap[typeof type] } = {};
+          const out: Record<string, any> = {};
           await Promise.all(ids.map(async (id) => {
-            let value = await readData(`${type}-${id}.json`) as SignalDataTypeMap[typeof type] | null;
+            let value = await readData(`${type}-${id}.json`) as any;
             if (type === "app-state-sync-key" && value) {
-              value = proto.Message.AppStateSyncKeyData.fromObject(value as any) as SignalDataTypeMap[typeof type];
+              value = proto.Message.AppStateSyncKeyData.fromObject(value);
             }
-            data[id] = value as SignalDataTypeMap[typeof type];
+            out[id] = value;
           }));
-          return data;
+          return out as { [id: string]: SignalDataTypeMap[typeof type] };
         },
         set: async (data) => {
           const tasks: Promise<void>[] = [];
           for (const category in data) {
-            const typedCategory = category as keyof SignalDataTypeMap;
-            for (const id in data[typedCategory]) {
-              const value = data[typedCategory]![id];
+            const entries = (data as any)[category] as Record<string, unknown> | undefined;
+            if (!entries) continue;
+            for (const [id, value] of Object.entries(entries)) {
               const file = `${category}-${id}.json`;
               tasks.push(value ? writeData(value, file) : removeData(file));
             }
