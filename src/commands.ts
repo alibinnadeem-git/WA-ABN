@@ -7,6 +7,7 @@ import { appendActivity, leadSummary, pipelineSummary, rowLink, searchLeads, upd
 import { searchHistory } from "./history.js";
 import { createBackup, listBackups } from "./backup.js";
 import { listRetries, resolveRetry } from "./retry.js";
+import { buildDigest } from "./digests.js";
 
 export interface CommandInput {
   sock: WASocket;
@@ -139,13 +140,7 @@ export async function handlePlatformCommand(input: CommandInput): Promise<boolea
 
     case "digest": {
       if (!config.features.digests) return false;
-      const s = opsSnapshot();
-      const lines = [`*${config.appName} Digest*`, `Processed: ${s.counters.messagesProcessed}`, `Rejected: ${s.counters.senderRejected}`, `Rate limited: ${s.counters.rateLimited}`];
-      if (config.features.leadCrm) {
-        const leads = await leadSummary();
-        lines.push(`Leads: ${leads.total} · Hot ${leads.hot} · Warm ${leads.warm} · Cold ${leads.cold} · New ${leads.new}`);
-      }
-      await reply(input.sock, input.jid, input.message, lines.join("\n"));
+      await reply(input.sock, input.jid, input.message, await buildDigest());
       return true;
     }
 
