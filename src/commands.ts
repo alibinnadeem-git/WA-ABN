@@ -8,6 +8,11 @@ import { searchHistory } from "./history.js";
 import { createBackup, listBackups } from "./backup.js";
 import { listRetries, resolveRetry } from "./retry.js";
 import { buildDigest } from "./digests.js";
+import { parseManualLead } from "./manual-lead.js";
+import { currentLeadEvent } from "./leads.js";
+import { appendLead, appendNoteToRow, findDuplicate } from "./sheets.js";
+import { emitIntegrationEvent } from "./integrations.js";
+import { increment } from "./ops.js";
 
 export interface CommandInput {
   sock: WASocket;
@@ -34,7 +39,7 @@ function helpText(): string {
   if (config.features.pipeline && config.features.leadCrm) commands.push("*!pipeline* — pipeline summary", "*!assign <row> <owner>* — assign lead", "*!stage <row> <stage>* — update pipeline stage", "*!followup <row> <2d> [note]* — set follow-up + reminder");
   if (config.features.backups) commands.push("*!backup* — create encrypted-state/config data backup", "*!backups* — list backups");
   if (config.features.retryQueue) commands.push("*!retries* — list failed work", "*!retry-resolve <id>* — mark retry item resolved");
-  if (config.features.leadCrm) commands.push("*!event <name>* / *!event off* — CRM event tagging");
+  if (config.features.leadCrm) commands.push("*!event <name>* / *!event off* — CRM event tagging", "*!lead Name | Company | Email | Phone | Notes* — capture a lead without AI");
   return `*${config.botDisplayName}*\n${config.appDescription}\n\n${commands.join("\n")}`;
 }
 
@@ -141,6 +146,50 @@ export async function handlePlatformCommand(input: CommandInput): Promise<boolea
     case "digest": {
       if (!config.features.digests) return false;
       await reply(input.sock, input.jid, input.message, await buildDigest());
+      return true;
+    }
+
+    case "lead": {
+      if (!config.features.leadCrm) return false;
+      let lead;
+      try {
+        lead = parseManualLead(arg);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Invalid lead";
+        await reply(input.sock, input.jid, input.message,
+          "Usage: !lead Full Name | Company | Email | Phone | Notes\\nLeave email or phone blank, but not both.\\n" + message);
+        return true;
+      }
+      const event = currentLeadEvent();
+      const dup = await findDuplicate(lead.email ? [lead.email] : [], lead.phone ? [lead.phone] : []);
+      if (dup) {
+        await appendNoteToRow(dup,
+          `[${new Date().toISOString()}] Manual lead from ${input.senderName}${event ? ` at ${event}` : ""}: ${lead.notes || "Met again"}`);
+        increment("duplicateLeads");
+        await reply(input.sock, input.jid, input.message, `Existing contact updated (row ${dup}): ${rowLink(dup)}`);
+        return true;
+      }
+      const now = new Date().toISOString();
+      const row = await appendLead({
+        "Captured At": now,
+        "Added By": input.senderName,
+        Source: "WhatsApp manual command",
+        "Full Name": lead.name,
+        Company: lead.company,
+        Email: lead.email,
+        Phone: lead.phone,
+        "Team Notes": lead.notes,
+        "Event / Where Met": event ?? "",
+        "Enrichment Confidence": "Manual entry; not AI-verified",
+        Status: "New",
+        "Pipeline Stage": "New",
+        "Last Activity": now,
+        "Activity Timeline": `[${now}] Lead manually captured by ${input.senderName}`,
+      });
+      increment("leadsSaved");
+      void emitIntegrationEvent("lead.created", { row, lead, event, addedBy: input.senderName, source: "Manual" })
+        .catch((e) => console.error("Manual lead integration failed", e));
+      await reply(input.sock, input.jid, input.message, `Lead captured: ${lead.name} at ${lead.company}.\\n${rowLink(row)}`);
       return true;
     }
 
