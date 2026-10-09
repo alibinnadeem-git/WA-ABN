@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { resolveTenantPaths } from "./tenant.js";
+import { claimTenantDataRoot, resolveTenantPaths } from "./tenant.js";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -49,6 +49,8 @@ function loadJsonObject(raw: string): Record<string, string> {
 const dataDir = path.resolve(process.env.DATA_DIR ?? "./data");
 const tenantPaths = resolveTenantPaths(dataDir, process.env.TENANT_ID, process.env.WA_SESSION_ID);
 const { tenantId, sessionId, tenantDir, sessionDir } = tenantPaths;
+fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+claimTenantDataRoot(dataDir, tenantId);
 for (const dir of [dataDir, path.join(dataDir, "tenants"), tenantDir, path.join(tenantDir, "sessions"), sessionDir]) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   if (fs.lstatSync(dir).isSymbolicLink()) throw new Error("Tenant data directories must not be symlinks");
