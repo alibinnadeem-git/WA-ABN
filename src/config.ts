@@ -51,6 +51,7 @@ const tenantPaths = resolveTenantPaths(dataDir, process.env.TENANT_ID, process.e
 const { tenantId, sessionId, tenantDir, sessionDir } = tenantPaths;
 for (const dir of [dataDir, path.join(dataDir, "tenants"), tenantDir, path.join(tenantDir, "sessions"), sessionDir]) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  if (fs.lstatSync(dir).isSymbolicLink()) throw new Error("Tenant data directories must not be symlinks");
   try { fs.chmodSync(dir, 0o700); } catch {}
 }
 
