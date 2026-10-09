@@ -21,6 +21,7 @@ import { recordHistory } from "./history.js";
 import { startScheduler } from "./scheduler.js";
 import { startAutoDigest } from "./digests.js";
 import { startAdvancedApi } from "./gateway.js";
+import { publishGatewayEvent } from "./gateway-events.js";
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? "warn" });
 const seen = new Set<string>();
@@ -94,7 +95,9 @@ async function start(): Promise<void> {
         const id = item.key.id;
         const jid = item.key.remoteJid;
         if (status != null && id && jid) {
-          recordHistory({ ts: new Date().toISOString(), id, jid, sender: "system", type: "receipt", status: String(status) });
+          if (config.features.eventStream) publishGatewayEvent("whatsapp.message_received", { jid, id, sender, hasMedia: input.images.length > 0 || input.vcards.length > 0 });
+
+  recordHistory({ ts: new Date().toISOString(), id, jid, sender: "system", type: "receipt", status: String(status) });
         }
       }
     });
@@ -118,6 +121,7 @@ async function start(): Promise<void> {
     }
     if (connection === "open") {
       activeSocket = sock;
+      if (config.features.eventStream) publishGatewayEvent("whatsapp.connected", {});
       setConnection("connected");
       setPairingState("idle");
       audit("whatsapp.connected");
@@ -133,6 +137,7 @@ async function start(): Promise<void> {
     }
     if (connection === "close") {
       const status = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
+      if (config.features.eventStream) publishGatewayEvent("whatsapp.disconnected", { status: status ?? null });
       if (activeSocket === sock) activeSocket = null;
       setConnection("disconnected");
       audit("whatsapp.disconnected", { status: status ?? null });
