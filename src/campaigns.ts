@@ -135,11 +135,12 @@ export class CampaignManager {
       c.sent.push(jid);
       c.cursor += 1;
       c.nextSendAt = now + this.options.intervalMs;
-      c.status = c.cursor === c.recipients.length ? "completed" : "approved";
+      // A concurrent admin pause/cancel remains authoritative after an in-flight send.
+      if (c.status === "running") c.status = c.cursor === c.recipients.length ? "completed" : "approved";
       this.options.audit("campaign.message_sent", { id: c.id, index: c.cursor });
       this.persist();
     } catch (error) {
-      c.status = "paused";
+      if (c.status !== "cancelled") c.status = "paused";
       c.error = error instanceof Error ? error.message.slice(0, 250) : "unknown send failure";
       this.persist();
       this.options.audit("campaign.send_paused", { id: c.id, index: c.cursor });
