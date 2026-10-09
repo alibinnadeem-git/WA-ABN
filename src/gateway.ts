@@ -60,6 +60,10 @@ function openapi(): Json {
       ["POST /v1/messages/text", "Send scoped text"],
       ["POST /v1/messages/media", "Send base64 image, audio, video or PDF (opt-in)"],
       ["POST /v1/messages/poll", "Create poll in permitted group"],
+      ["POST /v1/messages/reaction", "React to a message in an authorized destination"],
+      ["POST /v1/messages/location", "Send location information to an authorized destination"],
+      ["POST /v1/messages/contact", "Share a contact vCard to an authorized destination"],
+      ["POST /v1/profile/name", "Admin-change linked-account profile name"],
       ["POST /v1/campaigns", "Create approval-required campaign"],
       ["POST /v1/campaigns/{id}/approve", "Admin-approve campaign"],
       ["POST /v1/campaigns/{id}/pause", "Pause campaign"],
@@ -242,6 +246,50 @@ export function startAdvancedApi(socket: () => WASocket | null): void {
         const sent = await online().sendMessage(jid, { poll: { name, values, selectableCount: 1 } });
         audit("advanced.poll_created", { role });
         reply(res, 200, { id: sent?.key.id ?? null });
+        return;
+      }
+      if (url.pathname === "/v1/messages/reaction") {
+        requireRole("operator");
+        const jid = ensureDestination(body.jid);
+        const id = value(body.messageId, "messageId", 128);
+        const emoji = value(body.emoji, "emoji", 16);
+        if (!quota.consume()) { reply(res, 429, { error: "Outbound quota reached" }); return; }
+        await online().sendMessage(jid, { react: { text: emoji, key: { remoteJid: jid, id, fromMe: body.fromMe === true } } });
+        audit("advanced.reaction_sent", { role });
+        reply(res, 200, { ok: true });
+        return;
+      }
+      if (url.pathname === "/v1/messages/location") {
+        requireRole("operator");
+        const jid = ensureDestination(body.jid);
+        const lat = Number(body.latitude);
+        const lon = Number(body.longitude);
+        if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lon) || lon < -180 || lon > 180) throw new Error("Invalid coordinates");
+        if (!quota.consume()) { reply(res, 429, { error: "Outbound quota reached" }); return; }
+        const sent = await online().sendMessage(jid, { location: { degreesLatitude: lat, degreesLongitude: lon } });
+        audit("advanced.location_sent", { role });
+        reply(res, 200, { id: sent?.key.id ?? null });
+        return;
+      }
+      if (url.pathname === "/v1/messages/contact") {
+        requireRole("operator");
+        const jid = ensureDestination(body.jid);
+        const displayName = value(body.displayName, "displayName", 150);
+        const vcard = value(body.vcard, "vcard", 4096);
+        if (!vcard.startsWith("BEGIN:VCARD") || !vcard.includes("END:VCARD")) throw new Error("Invalid vCard");
+        if (!quota.consume()) { reply(res, 429, { error: "Outbound quota reached" }); return; }
+        const sent = await online().sendMessage(jid, { contacts: { displayName, contacts: [{ displayName, vcard }] } });
+        audit("advanced.contact_shared", { role });
+        reply(res, 200, { id: sent?.key.id ?? null });
+        return;
+      }
+      if (url.pathname === "/v1/profile/name") {
+        requireRole("admin");
+        if (!config.features.groupAdmin) { reply(res, 404, { error: "Account administration disabled" }); return; }
+        const name = value(body.name, "name", 100);
+        await online().updateProfileName(name);
+        audit("advanced.profile_name_changed", { role });
+        reply(res, 200, { ok: true });
         return;
       }
       if (url.pathname === "/v1/campaigns") {
