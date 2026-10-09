@@ -46,7 +46,7 @@ export const HEADERS = [
 type Header = (typeof HEADERS)[number];
 export type LeadRow = Partial<Record<Header, string>>;
 
-const lastCol = String.fromCharCode("A".charCodeAt(0) + HEADERS.length - 1);
+const lastCol = columnName(HEADERS.length); // Handles columns after Z (currently AC), unlike one-character ASCII math.
 const range = (r: string) => `'${config.sheetTab}'!${r}`;
 let tabGid = 0;
 
