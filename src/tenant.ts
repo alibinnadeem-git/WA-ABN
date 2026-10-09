@@ -1,6 +1,6 @@
 import path from "node:path";
 
-const ID_PATTERN = /^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$/;
+const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,62}[a-z0-9]$/;
 
 /** Tenant/session IDs are trusted deployment identifiers, never filesystem paths. */
 export function validateIsolationId(value: string | undefined, name: string): string {
