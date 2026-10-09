@@ -60,22 +60,22 @@ export function opsSnapshot() {
 export function prometheusMetrics(): string {
   const snap = opsSnapshot();
   const lines = [
-    "# HELP wa_abn_up Whether the WA-ABN process is running.",
-    "# TYPE wa_abn_up gauge",
-    "wa_abn_up 1",
-    "# HELP wa_abn_whatsapp_connected Whether WhatsApp is connected.",
-    "# TYPE wa_abn_whatsapp_connected gauge",
-    `wa_abn_whatsapp_connected ${snap.connection === "connected" ? 1 : 0}`,
-    "# HELP wa_abn_uptime_seconds Process uptime in seconds.",
-    "# TYPE wa_abn_uptime_seconds gauge",
-    `wa_abn_uptime_seconds ${snap.uptimeSeconds}`,
-    "# HELP wa_abn_pending_leads Leads waiting for context.",
-    "# TYPE wa_abn_pending_leads gauge",
-    `wa_abn_pending_leads ${snap.pendingLeads}`,
+    "# HELP messaging_up Whether the WA-ABN process is running.",
+    "# TYPE messaging_up gauge",
+    "messaging_up 1",
+    "# HELP messaging_whatsapp_connected Whether WhatsApp is connected.",
+    "# TYPE messaging_whatsapp_connected gauge",
+    `messaging_whatsapp_connected ${snap.connection === "connected" ? 1 : 0}`,
+    "# HELP messaging_uptime_seconds Process uptime in seconds.",
+    "# TYPE messaging_uptime_seconds gauge",
+    `messaging_uptime_seconds ${snap.uptimeSeconds}`,
+    "# HELP messaging_pending_leads Leads waiting for context.",
+    "# TYPE messaging_pending_leads gauge",
+    `messaging_pending_leads ${snap.pendingLeads}`,
   ];
   for (const [name, value] of Object.entries(snap.counters)) {
     const metric = name.replace(/[A-Z]/g, (m) => "_" + m.toLowerCase());
-    lines.push(`# TYPE wa_abn_${metric}_total counter`, `wa_abn_${metric}_total ${value}`);
+    lines.push(`# TYPE messaging_${metric}_total counter`, `messaging_${metric}_total ${value}`);
   }
   return lines.join("\n") + "\n";
 }
