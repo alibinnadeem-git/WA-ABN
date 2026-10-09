@@ -27,11 +27,15 @@ jobs:
 
   semgrep:
     runs-on: ubuntu-latest
-    container:
-      image: semgrep/semgrep
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - run: semgrep scan --config auto --error .
+      # Avoid Docker Hub pull-rate limits on unauthenticated GitHub runners.
+      - name: Install Semgrep in isolated Python environment
+        run: |
+          python3 -m venv "$RUNNER_TEMP/semgrep-venv"
+          "$RUNNER_TEMP/semgrep-venv/bin/python" -m pip install --disable-pip-version-check semgrep
+      - name: Run Semgrep policy scan
+        run: "$RUNNER_TEMP/semgrep-venv/bin/semgrep scan --config auto --error ."
 
   osv:
     permissions:
