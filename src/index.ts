@@ -95,9 +95,8 @@ async function start(): Promise<void> {
         const id = item.key.id;
         const jid = item.key.remoteJid;
         if (status != null && id && jid) {
-          if (config.features.eventStream) publishGatewayEvent("whatsapp.message_received", { jid, id, sender, hasMedia: input.images.length > 0 || input.vcards.length > 0 });
-
-  recordHistory({ ts: new Date().toISOString(), id, jid, sender: "system", type: "receipt", status: String(status) });
+          if (config.features.eventStream) publishGatewayEvent("whatsapp.receipt", { jid, id, status: String(status) });
+          recordHistory({ ts: new Date().toISOString(), id, jid, sender: "system", type: "receipt", status: String(status) });
         }
       }
     });
@@ -247,6 +246,7 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
 
   if (!input.text && !input.images.length && !input.vcards.length) return;
 
+  if (config.features.eventStream) publishGatewayEvent("whatsapp.message_received", { jid, id, sender, hasMedia: input.images.length > 0 || input.vcards.length > 0 });
   recordHistory({
     ts: new Date().toISOString(),
     id,
