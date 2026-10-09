@@ -5,7 +5,7 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-    image: local/wa-abn-platform:2
+    image: ${VENDOR_IMAGE:?Set a vendor-private image name/tag}
     env_file:
       - ${VENDOR_ENV_FILE:?Set a vendor-specific absolute path to its application.env}
     restart: unless-stopped
