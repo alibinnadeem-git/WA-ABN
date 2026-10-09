@@ -50,6 +50,7 @@ const dataDir = path.resolve(process.env.DATA_DIR ?? "./data");
 const tenantPaths = resolveTenantPaths(dataDir, process.env.TENANT_ID, process.env.WA_SESSION_ID);
 const { tenantId, sessionId, tenantDir, sessionDir } = tenantPaths;
 fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+if (fs.lstatSync(dataDir).isSymbolicLink()) throw new Error("Tenant data volume must not be symlinked");
 claimTenantDataRoot(dataDir, tenantId);
 for (const dir of [dataDir, path.join(dataDir, "tenants"), tenantDir, path.join(tenantDir, "sessions"), sessionDir]) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
