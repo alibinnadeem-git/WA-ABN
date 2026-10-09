@@ -4,6 +4,7 @@ import { audit } from "./audit.js";
 import { CampaignManager } from "./campaigns.js";
 import { config } from "./config.js";
 import { opsSnapshot } from "./ops.js";
+import { publishGatewayEvent, recentGatewayEvents, subscribeGatewayEvents } from "./gateway-events.js";
 import { authenticateRole, authorizedRecipient, hasRole, MessageQuota, type ApiRole } from "./gateway-policy.js";
 
 type Json = Record<string, unknown>;
@@ -52,6 +53,10 @@ function openapi(): Json {
       ["GET /v1/status", "Runtime state"],
       ["GET /v1/groups", "Permitted WhatsApp groups"],
       ["GET /v1/campaigns", "Campaign status"],
+      ["GET /v1/events/recent", "Recent vendor-local events"],
+      ["GET /v1/events/stream", "Authenticated server-sent event stream"],
+      ["POST /v1/integrations/notify", "Authenticated workflow sends an approved notification"],
+      ["POST /v1/integrations/events", "Authenticated workflow publishes a vendor-local event"],
       ["POST /v1/messages/text", "Send scoped text"],
       ["POST /v1/messages/media", "Send base64 image, audio, video or PDF (opt-in)"],
       ["POST /v1/messages/poll", "Create poll in permitted group"],
@@ -133,6 +138,30 @@ export function startAdvancedApi(socket: () => WASocket | null): void {
         reply(res, 200, openapi());
         return;
       }
+      if (req.method === "GET" && url.pathname === "/v1/events/recent") {
+        if (!config.features.eventStream) { reply(res, 404, { error: "Event stream disabled" }); return; }
+        reply(res, 200, { events: recentGatewayEvents(50) });
+        return;
+      }
+      if (req.method === "GET" && url.pathname === "/v1/events/stream") {
+        if (!config.features.eventStream) { reply(res, 404, { error: "Event stream disabled" }); return; }
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-store",
+          "Connection": "keep-alive",
+          "X-Accel-Buffering": "no",
+          "X-Content-Type-Options": "nosniff",
+        });
+        res.write(": vendor event stream connected\\n\\n");
+        const unsubscribe = subscribeGatewayEvents((event) => {
+          if (!res.writableEnded) res.write("data: " + JSON.stringify(event) + "\\n\\n");
+        });
+        const heartbeat = setInterval(() => {
+          if (!res.writableEnded) res.write(": heartbeat\\n\\n");
+        }, 25000);
+        res.on("close", () => { clearInterval(heartbeat); unsubscribe(); });
+        return;
+      }
       if (req.method === "GET" && url.pathname === "/v1/groups") {
         const groups = await Promise.all([...config.allowedGroupJids].map(async (jid) => {
           const meta = await socket()?.groupMetadata(jid).catch(() => null);
@@ -148,6 +177,29 @@ export function startAdvancedApi(socket: () => WASocket | null): void {
       if (req.method !== "POST") { reply(res, 404, { error: "Not found" }); return; }
       const body = await readBody(req);
 
+      if (url.pathname === "/v1/integrations/events") {
+        requireRole("operator");
+        if (!config.features.inboundWorkflows) { reply(res, 404, { error: "Inbound workflows disabled" }); return; }
+        const name = value(body.event, "event", 100);
+        if (!/^[a-z0-9_.-]+$/i.test(name)) throw new Error("Invalid event type");
+        const data = body.data;
+        if (!data || typeof data !== "object" || Array.isArray(data) || JSON.stringify(data).length > 4000) throw new Error("Invalid event data");
+        publishGatewayEvent("integration." + name, data as Record<string, unknown>);
+        audit("advanced.integration_event", { role, event: name });
+        reply(res, 202, { accepted: true });
+        return;
+      }
+      if (url.pathname === "/v1/integrations/notify") {
+        requireRole("operator");
+        if (!config.features.inboundWorkflows) { reply(res, 404, { error: "Inbound workflows disabled" }); return; }
+        const jid = ensureDestination(body.jid);
+        const text = value(body.text, "text", 4000);
+        if (!quota.consume()) { reply(res, 429, { error: "Outbound quota reached" }); return; }
+        const sent = await online().sendMessage(jid, { text });
+        audit("advanced.integration_notification", { role, destinationType: jid.endsWith("@g.us") ? "group" : "contact" });
+        reply(res, 200, { id: sent?.key.id ?? null });
+        return;
+      }
       if (url.pathname === "/v1/messages/text") {
         requireRole("operator");
         const jid = ensureDestination(body.jid);
