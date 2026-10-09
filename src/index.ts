@@ -21,6 +21,7 @@ import { recordHistory } from "./history.js";
 import { startScheduler } from "./scheduler.js";
 import { startAutoDigest } from "./digests.js";
 import { startAdvancedApi } from "./gateway.js";
+import { authorizedRecipient } from "./gateway-policy.js";
 import { publishGatewayEvent } from "./gateway-events.js";
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? "warn" });
@@ -94,7 +95,7 @@ async function start(): Promise<void> {
         const status = item.update.status;
         const id = item.key.id;
         const jid = item.key.remoteJid;
-        if (status != null && id && jid) {
+        if (status != null && id && jid && authorizedRecipient(jid, config.allowedGroupJids, config.advancedRecipientJids)) {
           if (config.features.eventStream) publishGatewayEvent("whatsapp.receipt", { jid, id, status: String(status) });
           recordHistory({ ts: new Date().toISOString(), id, jid, sender: "system", type: "receipt", status: String(status) });
         }
