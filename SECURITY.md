@@ -149,3 +149,16 @@ This module is intended for trusted workflow systems such as an organization's o
 ## Vendor white-label confidentiality
 
 The dashboard, HTTP authentication realm, bot status and CLI dashboard log use the vendor's own APP_NAME. Do not share the internal GitHub upstream, CI, host logs, encryption keys, support data or information about other vendors with a client unless independently authorized. Similar software may still be recognizable; do not represent shared code as exclusive ownership without contractual grounds. See [docs/VENDOR_CONFIDENTIALITY.md](docs/VENDOR_CONFIDENTIALITY.md).
+
+## Optional advanced API
+
+The vendor-scoped advanced gateway is **disabled by default**. When activated, it:
+- Binds to loopback only, requires unique strong role tokens (viewer/operator/admin) and has no open CORS;
+- Rejects destinations not in this vendor's explicit group/contact allowlists;
+- Applies a shared outbound send quota and per-campaign pacing and size caps;
+- Requires operator submission plus administrator confirmation before campaign dispatch;
+- Permits group management only under a separate feature flag with an administrator token;
+- Requires opt-in for event streams, inbound integration triggers and media endpoints;
+- Stores campaign queue files in the existing per-vendor session directory and pauses on uncertain/incomplete sends.
+
+Even when code is merged, enabling advanced functions requires approval by the vendor's operator, legal/policy assessment, runtime verification and testing against a dedicated WhatsApp account. The API is not a public bulk-spam gateway; no spoofed identity or remote shell endpoint has been added. See [docs/ADVANCED_GATEWAY.md](docs/ADVANCED_GATEWAY.md).

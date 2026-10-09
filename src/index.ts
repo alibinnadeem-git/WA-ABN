@@ -20,6 +20,9 @@ import { handlePlatformCommand } from "./commands.js";
 import { recordHistory } from "./history.js";
 import { startScheduler } from "./scheduler.js";
 import { startAutoDigest } from "./digests.js";
+import { startAdvancedApi } from "./gateway.js";
+import { authorizedRecipient } from "./gateway-policy.js";
+import { publishGatewayEvent } from "./gateway-events.js";
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? "warn" });
 const seen = new Set<string>();
@@ -27,6 +30,7 @@ const announcedGroups = new Set<string>();
 const recent = new Map<string, WAMessage>();
 const senderWindows = new Map<string, number[]>();
 let reconnectTimer: NodeJS.Timeout | null = null;
+let activeSocket: WASocket | null = null;
 
 function remember(m: WAMessage): void {
   recent.set(m.key.id!, m);
@@ -91,7 +95,8 @@ async function start(): Promise<void> {
         const status = item.update.status;
         const id = item.key.id;
         const jid = item.key.remoteJid;
-        if (status != null && id && jid) {
+        if (status != null && id && jid && authorizedRecipient(jid, config.allowedGroupJids, config.advancedRecipientJids)) {
+          if (config.features.eventStream) publishGatewayEvent("whatsapp.receipt", { jid, id, status: String(status) });
           recordHistory({ ts: new Date().toISOString(), id, jid, sender: "system", type: "receipt", status: String(status) });
         }
       }
@@ -115,6 +120,8 @@ async function start(): Promise<void> {
       qrcode.generate(qr, { small: true });
     }
     if (connection === "open") {
+      activeSocket = sock;
+      if (config.features.eventStream) publishGatewayEvent("whatsapp.connected", {});
       setConnection("connected");
       setPairingState("idle");
       audit("whatsapp.connected");
@@ -130,6 +137,8 @@ async function start(): Promise<void> {
     }
     if (connection === "close") {
       const status = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
+      if (config.features.eventStream) publishGatewayEvent("whatsapp.disconnected", { status: status ?? null });
+      if (activeSocket === sock) activeSocket = null;
       setConnection("disconnected");
       audit("whatsapp.disconnected", { status: status ?? null });
       if (status === DisconnectReason.loggedOut) {
@@ -238,6 +247,7 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
 
   if (!input.text && !input.images.length && !input.vcards.length) return;
 
+  if (config.features.eventStream) publishGatewayEvent("whatsapp.message_received", { jid, id, sender, hasMedia: input.images.length > 0 || input.vcards.length > 0 });
   recordHistory({
     ts: new Date().toISOString(),
     id,
@@ -279,6 +289,7 @@ audit("process.start", {
   senderAllowlistConfigured: config.allowedSenderJids.size > 0,
 });
 startOpsDashboard();
+startAdvancedApi(() => activeSocket);
 if (config.features.leadCrm) {
   await ensureSheet();
   console.log(`📄 CRM backend ready (Google Sheet tab "${config.sheetTab}").`);
