@@ -48,7 +48,7 @@ DATA_DIR/tenants/<TENANT_ID>/sessions/<WA_SESSION_ID>/
   backups/
 ```
 
-TENANT_ID and WA_SESSION_ID are mandatory strict slugs. Path components such as `..`, slashes, URL-encoded paths, and whitespace are rejected. Startup does not silently read the old shared `DATA_DIR` root. Tests in `tests/tenant.test.ts` cover these boundaries.
+A persistent `.tenant-owner` marker binds each DATA_DIR volume to exactly one tenant; reusing a volume under a different tenant ID fails closed. TENANT_ID and WA_SESSION_ID are mandatory strict slugs. Path components such as `..`, slashes, URL-encoded paths, and whitespace are rejected. Startup does not silently read the old shared `DATA_DIR` root. Tests in `tests/tenant.test.ts` cover these boundaries.
 
 ## White-label presentation
 
