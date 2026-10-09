@@ -3,7 +3,11 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { config } from "./config.js";
 
-const client = new Anthropic();
+// A non-AI CRM deployment must boot without an ANTHROPIC_API_KEY.
+function aiClient(): Anthropic {
+  if (!config.features.aiExtraction) throw new Error("AI extraction is disabled for this deployment");
+  return new Anthropic();
+}
 
 // Server-side fallback: if a request is declined by a safety classifier, the API
 // re-runs it on Anthropic's recommended fallback model instead of returning a refusal.
@@ -74,7 +78,7 @@ export async function extractLeads(input: MessageInput): Promise<Extraction> {
     text: input.text ? `Message text / caption:\n${input.text}` : "(no caption)",
   });
 
-  const response = await client.beta.messages.parse({
+  const response = await aiClient().beta.messages.parse({
     model: config.model,
     max_tokens: 8000,
     ...FALLBACK,
@@ -134,7 +138,7 @@ Team notes: ${teamContext ?? "none"}`;
 
   // Server-tool loops can pause after many iterations; resume a few times if so.
   for (let attempt = 0; attempt < 4; attempt++) {
-    const response = await client.beta.messages.parse({
+    const response = await aiClient().beta.messages.parse({
       model: config.model,
       max_tokens: 16000,
       ...FALLBACK,
