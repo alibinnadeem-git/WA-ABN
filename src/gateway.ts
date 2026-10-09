@@ -48,7 +48,7 @@ function openapi(): Json {
     servers: [{ url: "http://127.0.0.1:" + config.advancedApiPort }],
     components: { securitySchemes: { bearerAuth: { type: "http", scheme: "bearer" } } },
     security: [{ bearerAuth: [] }],
-    paths: Object.fromEntries([
+    paths: [
       ["GET /v1/status", "Runtime state"],
       ["GET /v1/groups", "Permitted WhatsApp groups"],
       ["GET /v1/campaigns", "Campaign status"],
@@ -73,7 +73,7 @@ function openapi(): Json {
     }).reduce((acc, [path, spec]) => {
       Object.assign((acc[path as string] ??= {}), spec);
       return acc;
-    }, {} as Record<string, Json>)),
+    }, {} as Record<string, Json>),
   };
 }
 
