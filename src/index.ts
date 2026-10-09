@@ -20,6 +20,7 @@ import { handlePlatformCommand } from "./commands.js";
 import { recordHistory } from "./history.js";
 import { startScheduler } from "./scheduler.js";
 import { startAutoDigest } from "./digests.js";
+import { startAdvancedApi } from "./gateway.js";
 
 const logger = pino({ level: process.env.LOG_LEVEL ?? "warn" });
 const seen = new Set<string>();
@@ -27,6 +28,7 @@ const announcedGroups = new Set<string>();
 const recent = new Map<string, WAMessage>();
 const senderWindows = new Map<string, number[]>();
 let reconnectTimer: NodeJS.Timeout | null = null;
+let activeSocket: WASocket | null = null;
 
 function remember(m: WAMessage): void {
   recent.set(m.key.id!, m);
@@ -115,6 +117,7 @@ async function start(): Promise<void> {
       qrcode.generate(qr, { small: true });
     }
     if (connection === "open") {
+      activeSocket = sock;
       setConnection("connected");
       setPairingState("idle");
       audit("whatsapp.connected");
@@ -130,6 +133,7 @@ async function start(): Promise<void> {
     }
     if (connection === "close") {
       const status = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
+      if (activeSocket === sock) activeSocket = null;
       setConnection("disconnected");
       audit("whatsapp.disconnected", { status: status ?? null });
       if (status === DisconnectReason.loggedOut) {
@@ -279,6 +283,7 @@ audit("process.start", {
   senderAllowlistConfigured: config.allowedSenderJids.size > 0,
 });
 startOpsDashboard();
+startAdvancedApi(() => activeSocket);
 if (config.features.leadCrm) {
   await ensureSheet();
   console.log(`📄 CRM backend ready (Google Sheet tab "${config.sheetTab}").`);
