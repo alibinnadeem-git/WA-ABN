@@ -152,12 +152,12 @@ export function startAdvancedApi(socket: () => WASocket | null): void {
           "X-Accel-Buffering": "no",
           "X-Content-Type-Options": "nosniff",
         });
-        res.write(": vendor event stream connected\\n\\n");
+        res.write(": vendor event stream connected\n\n");
         const unsubscribe = subscribeGatewayEvents((event) => {
-          if (!res.writableEnded) res.write("data: " + JSON.stringify(event) + "\\n\\n");
+          if (!res.writableEnded) res.write("data: " + JSON.stringify(event) + "\n\n");
         });
         const heartbeat = setInterval(() => {
-          if (!res.writableEnded) res.write(": heartbeat\\n\\n");
+          if (!res.writableEnded) res.write(": heartbeat\n\n");
         }, 25000);
         res.on("close", () => { clearInterval(heartbeat); unsubscribe(); });
         return;
