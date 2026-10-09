@@ -60,7 +60,7 @@ export async function handlePlatformCommand(input: CommandInput): Promise<boolea
         input.sock,
         input.jid,
         input.message,
-        `*${config.appName}*\nWhatsApp: ${s.connection}\nUptime: ${Math.floor(s.uptimeSeconds / 60)} min\nProfile: ${config.profile}\nFeatures: ${Object.entries(config.features).filter(([,v])=>v).map(([k])=>k).join(", ")}`,
+        `*${config.appName}*\nWhatsApp: ${s.connection}\nUptime: ${Math.floor(s.uptimeSeconds / 60)} min`,
       );
       return true;
     }

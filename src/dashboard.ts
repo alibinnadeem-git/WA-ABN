@@ -9,9 +9,13 @@ import { listReminders } from "./scheduler.js";
 import { listBackups } from "./backup.js";
 import { listRetries } from "./retry.js";
 
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 function unauthorized(res: ServerResponse): void {
   res.writeHead(401, {
-    "WWW-Authenticate": 'Basic realm="WA-ABN Ops", charset="UTF-8"',
+    "WWW-Authenticate": `Basic realm="${config.appName} Operations", charset="UTF-8"`,
     "Cache-Control": "no-store",
   });
   res.end("Authentication required");
@@ -70,7 +74,7 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${config.appName} Ops</title>
+<title>${escapeHtml(config.appName)} Operations</title>
 <style>
 :root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#111827;background:#f3f4f6}
 body{margin:0;padding:24px}.wrap{max-width:1200px;margin:auto}
@@ -84,7 +88,7 @@ table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;p
 </style>
 </head>
 <body><div class="wrap">
-<h1>${config.appName} Ops</h1><div class="sub">${config.appDescription}</div>
+<h1>${escapeHtml(config.appName)} Operations</h1><div class="sub">${escapeHtml(config.appDescription)}</div>
 <div id="cards" class="grid"></div>
 <section class="card"><h3>Search</h3><input id="q" placeholder="Search CRM/history…"><div id="leads"></div></section>
 <section class="card"><h3>Recent security events</h3><div id="audit"></div></section>
@@ -138,7 +142,7 @@ export function startOpsDashboard(): void {
         return;
       }
       if (url.pathname === "/api/status") {
-        json(res, { app: { id: config.appId, name: config.appName, profile: config.profile, sessionId: config.sessionId }, runtime: opsSnapshot(), features: config.features, leads: config.features.leadCrm ? await leadSummary() : null, pipeline: config.features.leadCrm && config.features.pipeline ? await pipelineSummary() : null, followups: config.features.leadCrm && config.features.pipeline ? await followupAging() : null, history: historyStats(), reminders: listReminders().length, retries: config.features.retryQueue ? listRetries().length : 0, backups: config.features.backups ? listBackups().length : 0 });
+        json(res, { app: { name: config.appName, description: config.appDescription }, runtime: opsSnapshot(), features: config.features, leads: config.features.leadCrm ? await leadSummary() : null, pipeline: config.features.leadCrm && config.features.pipeline ? await pipelineSummary() : null, followups: config.features.leadCrm && config.features.pipeline ? await followupAging() : null, history: historyStats(), reminders: listReminders().length, retries: config.features.retryQueue ? listRetries().length : 0, backups: config.features.backups ? listBackups().length : 0 });
         return;
       }
       if (url.pathname === "/api/audit") {
@@ -207,6 +211,6 @@ export function startOpsDashboard(): void {
   server.headersTimeout = 10_000;
   server.maxHeadersCount = 50;
   server.listen(config.opsDashboardPort, config.opsDashboardHost, () => {
-    console.log(`🛡️ WA-ABN Ops dashboard: http://${config.opsDashboardHost}:${config.opsDashboardPort}`);
+    console.log(`🛡️ ${config.appName} Operations: http://${config.opsDashboardHost}:${config.opsDashboardPort}`);
   });
 }

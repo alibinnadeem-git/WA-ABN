@@ -1,0 +1,26 @@
+# Deploy a separate Compose project per vendor. Never share a data volume,
+# WhatsApp number, encryption key, Sheet, dashboard, AI key, or service-account credentials.
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: ${VENDOR_IMAGE:?Set a vendor-private image name/tag}
+    env_file:
+      - ${VENDOR_ENV_FILE:?Set a vendor-specific absolute path to its application.env}
+    restart: unless-stopped
+    read_only: true
+    user: node
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    volumes:
+      - vendor_private_state:/data
+    # No public ports. For optional Ops Dashboard use a tenant-private VPN/
+    # reverse proxy rather than publishing a shared dashboard.
+
+volumes:
+  vendor_private_state: {}

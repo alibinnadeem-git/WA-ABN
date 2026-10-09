@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { claimTenantDataRoot, resolveTenantPaths } from "./tenant.js";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -46,36 +47,44 @@ function loadJsonObject(raw: string): Record<string, string> {
 }
 
 const dataDir = path.resolve(process.env.DATA_DIR ?? "./data");
-const sessionId = process.env.WA_SESSION_ID || "default";
-const sessionDir = sessionId === "default" ? dataDir : path.join(dataDir, "sessions", sessionId);
+const tenantPaths = resolveTenantPaths(dataDir, process.env.TENANT_ID, process.env.WA_SESSION_ID);
+const { tenantId, sessionId, tenantDir, sessionDir } = tenantPaths;
 fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
-try { fs.chmodSync(dataDir, 0o700); } catch {}
-fs.mkdirSync(sessionDir, { recursive: true, mode: 0o700 });
-try { fs.chmodSync(sessionDir, 0o700); } catch {}
+if (fs.lstatSync(dataDir).isSymbolicLink()) throw new Error("Tenant data volume must not be symlinked");
+claimTenantDataRoot(dataDir, tenantId);
+for (const dir of [dataDir, path.join(dataDir, "tenants"), tenantDir, path.join(tenantDir, "sessions"), sessionDir]) {
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  if (fs.lstatSync(dir).isSymbolicLink()) throw new Error("Tenant data directories must not be symlinks");
+  try { fs.chmodSync(dir, 0o700); } catch {}
+}
 
-const featureLeadCrm = bool("FEATURE_LEAD_CRM", true);
+const featureLeadCrm = bool("FEATURE_LEAD_CRM", false);
 const serviceAccountRaw = optional("GOOGLE_SERVICE_ACCOUNT_JSON");
 
 export const config = {
   // Generic application identity. STRATUM is just one possible deployment profile.
-  appId: process.env.APP_ID || "wa-abn",
-  appName: process.env.APP_NAME || "WA-ABN",
-  appDescription: process.env.APP_DESCRIPTION || "Secure reusable WhatsApp automation platform",
+  appId: required("APP_ID"),
+  appName: required("APP_NAME"),
+  appDescription: process.env.APP_DESCRIPTION || "Team messaging operations",
   appContext:
     process.env.APP_CONTEXT ||
     process.env.COMPANY_CONTEXT ||
     "A team using WhatsApp for operational workflows.",
-  botDisplayName: process.env.BOT_DISPLAY_NAME || "WA-ABN",
-  profile: process.env.APP_PROFILE || "lead-crm",
+  botDisplayName: required("BOT_DISPLAY_NAME"),
+  profile: process.env.APP_PROFILE || "generic",
 
   dataDir,
+  tenantId,
+  tenantDir,
   sessionId,
   sessionDir,
-  authDir: path.join(sessionDir, "wa-auth"),
-  statePath: path.join(sessionDir, "state.json"),
-  auditPath: path.join(sessionDir, "security-audit.jsonl"),
-  historyPath: path.join(sessionDir, "message-history.jsonl"),
-  schedulerPath: path.join(sessionDir, "scheduled-jobs.json"),
+  authDir: tenantPaths.authDir,
+  statePath: tenantPaths.statePath,
+  auditPath: tenantPaths.auditPath,
+  historyPath: tenantPaths.historyPath,
+  schedulerPath: tenantPaths.schedulerPath,
+  retryPath: tenantPaths.retryPath,
+  backupDir: tenantPaths.backupDir,
 
   features: {
     leadCrm: featureLeadCrm,
@@ -142,4 +151,17 @@ if (config.opsDashboardEnabled && config.opsDashboardToken.length < 32) {
 
 if (config.allowedGroupJids.size === 0 && config.groupJid) {
   config.allowedGroupJids.add(config.groupJid);
+}
+
+for (const [key, value] of Object.entries({
+  APP_ID: config.appId,
+  APP_NAME: config.appName,
+  BOT_DISPLAY_NAME: config.botDisplayName,
+})) {
+  if (value.length > 100 || /[\r\n<>]/.test(value)) {
+    throw new Error(`${key} contains unsafe branding characters`);
+  }
+}
+if (config.features.webhooks && (!config.outboundWebhookUrl || config.webhookAllowedHosts.size === 0)) {
+  throw new Error("Enabled webhooks require a vendor-specific URL and explicit WEBHOOK_ALLOWED_HOSTS");
 }

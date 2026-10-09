@@ -33,7 +33,7 @@ Primary threats:
 - **No runtime WhatsApp-version fetch.** The application uses the reviewed Baileys dependency from the lockfile instead of dynamically selecting a version at startup.
 - **Non-root container.** Production runs as the official Node image's unprivileged `node` user.
 - **No general inbound send API.** The optional Ops Dashboard is disabled by default, binds to `127.0.0.1`, requires a minimum-32-character token, and exposes read-only status/search/audit/metrics functionality.
-- **Session isolation.** `WA_SESSION_ID` namespaces credentials, state, history, scheduler jobs and audit logs for separate deployments using the same repository.
+- **Vendor and session isolation.** Mandatory `TENANT_ID` and `WA_SESSION_ID` scope credentials, state, backups, history, scheduler jobs, retries and audit logs; vendors still require separate services, storage and credentials.
 - **Safe outbound integration hook.** Optional webhooks require HTTPS, reject redirects/private addresses, and can require an explicit hostname allowlist.
 - **Retry/backup modules.** Persisted failed work and backups remain inside the deployment data boundary; WhatsApp auth files remain encrypted.
 - **Spreadsheet formula-injection defense.** Untrusted lead values beginning with formula sigils are escaped before insertion.
@@ -124,7 +124,7 @@ If binding to `0.0.0.0` for container access, publish the port on host loopback 
 
 ## Profile and module isolation
 
-Project profiles are configuration, not forks. A profile should not weaken the core trust boundary. Review any profile that:
+Project profiles are configuration, not forks. A profile should not weaken the core trust boundary. Each vendor must deploy independently with unique credentials, WhatsApp identity, CRM, backups, storage and dashboard access. Review any profile that:
 - enables message history;
 - enables outbound webhooks;
 - broadens authorized groups or senders;
@@ -132,7 +132,7 @@ Project profiles are configuration, not forks. A profile should not weaken the c
 - adds a new write-capable HTTP API;
 - adds bulk messaging or group-administration capabilities.
 
-Run separate process/container instances with distinct `WA_SESSION_ID` values for unrelated WhatsApp accounts. This keeps credentials and operational state isolated even though every deployment uses the same repository.
+Run separate process/container instances with unique `TENANT_ID` and `WA_SESSION_ID` values for unrelated vendors. For strongest isolation, use separate cloud projects/accounts, volumes, backup stores and keys. IDs alone are not an authorization boundary.
 
 ## Outbound webhook controls
 
@@ -145,3 +145,7 @@ Run separate process/container instances with distinct `WA_SESSION_ID` values fo
 - never uses the webhook response as executable code.
 
 This module is intended for trusted workflow systems such as an organization's own n8n instance, not arbitrary user-supplied destinations.
+
+## Vendor white-label confidentiality
+
+The dashboard, HTTP authentication realm, bot status and CLI dashboard log use the vendor's own APP_NAME. Do not share the internal GitHub upstream, CI, host logs, encryption keys, support data or information about other vendors with a client unless independently authorized. Similar software may still be recognizable; do not represent shared code as exclusive ownership without contractual grounds. See [docs/VENDOR_CONFIDENTIALITY.md](docs/VENDOR_CONFIDENTIALITY.md).
