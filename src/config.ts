@@ -102,6 +102,10 @@ export const config = {
     backups: bool("FEATURE_BACKUPS", true),
     retryQueue: bool("FEATURE_RETRY_QUEUE", true),
     webhooks: bool("FEATURE_WEBHOOKS", false),
+    advancedApi: bool("FEATURE_ADVANCED_API", false),
+    campaigns: bool("FEATURE_CAMPAIGNS", false),
+    groupAdmin: bool("FEATURE_GROUP_ADMIN", false),
+    apiMedia: bool("FEATURE_API_MEDIA", false),
   },
 
   // Optional read-only operations dashboard. Localhost by default.
@@ -119,6 +123,19 @@ export const config = {
   maxMessagesPerMinute: Math.max(1, Number(process.env.MAX_MESSAGES_PER_MINUTE ?? 20)),
   maxImageBytes: Math.max(1024 * 1024, Number(process.env.MAX_IMAGE_BYTES ?? 8 * 1024 * 1024)),
   authEncryptionKey: parseAuthKey(required("WA_AUTH_ENCRYPTION_KEY")),
+
+  // Advanced gateway: dedicated localhost listener, separate vendor credentials and scopes.
+  advancedApiHost: process.env.ADVANCED_API_HOST || "127.0.0.1",
+  advancedApiPort: Number(process.env.ADVANCED_API_PORT ?? 8790),
+  advancedViewToken: process.env.ADVANCED_VIEW_TOKEN || "",
+  advancedOperatorToken: process.env.ADVANCED_OPERATOR_TOKEN || "",
+  advancedAdminToken: process.env.ADVANCED_ADMIN_TOKEN || "",
+  advancedRecipientJids: csv("ADVANCED_APPROVED_RECIPIENT_JIDS"),
+  advancedCampaignMax: Number(process.env.ADVANCED_CAMPAIGN_MAX_RECIPIENTS ?? 25),
+  advancedPerMinute: Number(process.env.ADVANCED_SEND_PER_MINUTE ?? 6),
+  advancedPerDay: Number(process.env.ADVANCED_SEND_PER_DAY ?? 100),
+  advancedCampaignIntervalMs: Number(process.env.ADVANCED_CAMPAIGN_INTERVAL_SECONDS ?? 20) * 1000,
+  advancedCampaignPath: path.join(sessionDir, "campaigns.json"),
 
   // History/privacy
   historyMaxTextChars: Math.max(0, Math.min(20_000, Number(process.env.HISTORY_MAX_TEXT_CHARS ?? 2000))),
@@ -164,4 +181,25 @@ for (const [key, value] of Object.entries({
 }
 if (config.features.webhooks && (!config.outboundWebhookUrl || config.webhookAllowedHosts.size === 0)) {
   throw new Error("Enabled webhooks require a vendor-specific URL and explicit WEBHOOK_ALLOWED_HOSTS");
+}
+
+if (config.features.advancedApi) {
+  const tokens = [config.advancedViewToken, config.advancedOperatorToken, config.advancedAdminToken];
+  if (tokens.some((token) => token.length < 32) || new Set(tokens).size !== 3) {
+    throw new Error("Advanced API requires three different >=32-character viewer/operator/admin secrets");
+  }
+  if (!Number.isInteger(config.advancedApiPort) || config.advancedApiPort < 1 || config.advancedApiPort > 65535) {
+    throw new Error("Invalid ADVANCED_API_PORT");
+  }
+  if (!["127.0.0.1", "::1"].includes(config.advancedApiHost)) {
+    throw new Error("Advanced API currently requires loopback binding; access via private authenticated tunnel");
+  }
+  const limits = [config.advancedCampaignMax, config.advancedPerMinute, config.advancedPerDay, config.advancedCampaignIntervalMs];
+  if (!limits.every((n) => Number.isFinite(n) && n >= 1)) throw new Error("Advanced gateway limits must be positive numbers");
+  if (config.advancedCampaignMax > 500 || config.advancedPerMinute > 60 || config.advancedPerDay > 1000 || config.advancedCampaignIntervalMs < 1000) {
+    throw new Error("Advanced gateway limits exceed safety caps");
+  }
+}
+if ((config.features.campaigns || config.features.groupAdmin || config.features.apiMedia) && !config.features.advancedApi) {
+  throw new Error("Advanced features require FEATURE_ADVANCED_API=true");
 }
