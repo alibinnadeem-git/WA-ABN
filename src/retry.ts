@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { config } from "./config.js";
 import { audit } from "./audit.js";
 
@@ -14,7 +13,7 @@ export interface RetryItem {
   updatedAt: string;
 }
 
-const path = join(config.sessionDir, "retry-queue.json");
+const path = config.retryPath;
 let queue: RetryItem[] = [];
 
 function load(): void {
