@@ -22,7 +22,7 @@
 | Session backups | backups | On | Encrypted auth files remain encrypted |
 | Retry queue | retry | On | Failed work visibility |
 | Safe outbound webhooks | integrations | Off | HTTPS + allowlist + SSRF controls |
-| Session namespacing | core | On | Multiple isolated deployments from one repo |
+| Vendor/session namespacing | core | Required | Explicit TENANT_ID and WA_SESSION_ID; separate deployed services |
 | AI lead extraction | AI | CRM-dependent | Optional |
 | Lead enrichment | AI | CRM-dependent | Optional |
 | Google Sheets CRM | CRM | On for legacy compatibility | Can be disabled |
@@ -51,3 +51,7 @@ These capabilities can be added as project modules, but are not enabled as broad
 ## Reuse model
 
 A new application should normally add a profile under `profiles/` and enable modules. Only application-specific business logic should require a new code module.
+
+## Vendor confidentiality
+
+Customer deployments are fully white-labeled and isolated from one another. A vendor must never share another vendor's WhatsApp number, data volume, service account, provider keys, group allowlist, dashboard, integrations, backups or monitoring. See [VENDOR_CONFIDENTIALITY.md](VENDOR_CONFIDENTIALITY.md).
