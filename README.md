@@ -305,3 +305,14 @@ To turn them on in a vendor-private deployment, configure `FEATURE_ADVANCED_API=
 **Details, API paths, limits, examples, and remaining adapters:** [Advanced Gateway Guide](docs/ADVANCED_GATEWAY.md).
 
 The modules require no additional commercial software license, but WhatsApp account policy, AI provider fees, cloud hosting, and any other external provider usage may still involve costs.
+
+## STRATUM Power WhatsApp CRM pilot
+
+Two supported configurations are available in the **same** WA-ABN upstream repository:
+
+- `profiles/stratum-manual-pilot.env.example`: Google Sheets CRM and WhatsApp `!lead` entry with **no AI provider required**.
+- `profiles/stratum-lead-crm.env.example`: optional AI business-card/vCard extraction and web enrichment; Anthropic usage may incur costs.
+
+The structured command is `!lead Full Name | Company | Email | Phone | Notes`. A lead needs an email or telephone number for duplicate checking. This pathway never invokes the AI provider when `FEATURE_AI_EXTRACTION=false`.
+
+Read [STRATUM launch gates and verification](docs/STRATUM_LAUNCH.md) before pairing a dedicated WhatsApp account or enabling external messaging. The pilot is **not live** until credentialed WhatsApp/Sheets UAT passes.
