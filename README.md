@@ -293,3 +293,15 @@ Avoid making a separate fork merely to rename the bot or change business context
 ## White-label vendor confidentiality
 
 WA-ABN is the internal upstream codebase. Customers see only their own vendor-branded dashboard and bot. Each vendor needs a distinct deployed service, storage volume, secrets, WhatsApp account, CRM, integrations and access controls. The core requires explicit TENANT_ID and WA_SESSION_ID and does not automatically adopt legacy shared storage. See [Vendor Confidentiality](docs/VENDOR_CONFIDENTIALITY.md) for migration and deployment guidance.
+
+## Advanced features are included — opt in per vendor
+
+The platform also includes an **optional authenticated advanced gateway**, incorporating feature ideas from OpenWA, WAHA, WPPConnect, whatsapp-web.js and similar free projects. No vendor automatically receives these capabilities, and enabling them for Vendor A does not enable them for Vendor B.
+
+Modules include a local REST gateway, scoped text/image/audio/video/PDF sending, polls, reactions, contacts, locations, profile name changes, group creation/join/administration, reviewed paced campaigns, a vendor-local SSE event stream, inbound workflow events, and OpenAPI JSON.
+
+To turn them on in a vendor-private deployment, configure `FEATURE_ADVANCED_API=true`, distinct `ADVANCED_VIEW_TOKEN`/`ADVANCED_OPERATOR_TOKEN`/`ADVANCED_ADMIN_TOKEN`, an approved recipient list, and whichever `FEATURE_CAMPAIGNS`, `FEATURE_API_MEDIA`, `FEATURE_GROUP_ADMIN`, `FEATURE_EVENT_STREAM`, or `FEATURE_INBOUND_WORKFLOWS` flags are appropriate. Default is OFF for all.
+
+**Details, API paths, limits, examples, and remaining adapters:** [Advanced Gateway Guide](docs/ADVANCED_GATEWAY.md).
+
+The modules require no additional commercial software license, but WhatsApp account policy, AI provider fees, cloud hosting, and any other external provider usage may still involve costs.
