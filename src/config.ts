@@ -106,6 +106,8 @@ export const config = {
     campaigns: bool("FEATURE_CAMPAIGNS", false),
     groupAdmin: bool("FEATURE_GROUP_ADMIN", false),
     apiMedia: bool("FEATURE_API_MEDIA", false),
+    eventStream: bool("FEATURE_EVENT_STREAM", false),
+    inboundWorkflows: bool("FEATURE_INBOUND_WORKFLOWS", false),
   },
 
   // Optional read-only operations dashboard. Localhost by default.
@@ -200,6 +202,6 @@ if (config.features.advancedApi) {
     throw new Error("Advanced gateway limits exceed safety caps");
   }
 }
-if ((config.features.campaigns || config.features.groupAdmin || config.features.apiMedia) && !config.features.advancedApi) {
+if ((config.features.campaigns || config.features.groupAdmin || config.features.apiMedia || config.features.eventStream || config.features.inboundWorkflows) && !config.features.advancedApi) {
   throw new Error("Advanced features require FEATURE_ADVANCED_API=true");
 }
