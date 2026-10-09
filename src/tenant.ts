@@ -1,3 +1,4 @@
+import { lstatSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,62}[a-z0-9]$/;
@@ -34,4 +35,25 @@ export function resolveTenantPaths(dataRoot: string, tenantInput: string | undef
     retryPath: path.join(sessionDir, "retry-queue.json"),
     backupDir: path.join(sessionDir, "backups"),
   };
+}
+
+/**
+ * Fail closed when a different vendor tries to reuse this deployment's data volume.
+ * This does not replace container/volume isolation; it catches common misconfigurations.
+ */
+export function claimTenantDataRoot(root: string, tenantId: string): void {
+  validateIsolationId(tenantId, "TENANT_ID");
+  const marker = path.join(path.resolve(root), ".tenant-owner");
+  try {
+    writeFileSync(marker, tenantId + "\n", { flag: "wx", mode: 0o600 });
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+  if (lstatSync(marker).isSymbolicLink()) {
+    throw new Error("Tenant volume marker must not be a symlink");
+  }
+  const owner = readFileSync(marker, "utf8").trim();
+  if (owner !== tenantId) {
+    throw new Error("Storage volume belongs to another tenant; refusing to access shared vendor data");
+  }
 }
