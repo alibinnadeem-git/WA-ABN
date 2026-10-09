@@ -4,6 +4,8 @@
 
 STRATUM is **not a fork** of WA-ABN. It is one configurable profile stored in this same repository.
 
+**Independent vendors do not share a live service.** Each vendor gets a separate branded deployment, WhatsApp account, data volume, secrets, dashboard and access permissions. See [Vendor Confidentiality](docs/VENDOR_CONFIDENTIALITY.md).
+
 ## Architecture
 
 ```
@@ -150,17 +152,20 @@ CRM profile adds:
 Use the **same repo** for multiple WhatsApp applications. Give each deployment a different:
 
 ```dotenv
+TENANT_ID=vendor-a
 APP_ID=project-a
+APP_NAME="Vendor A Operations"
+BOT_DISPLAY_NAME="Vendor A Assistant"
 WA_SESSION_ID=project-a
 ```
 
 WA-ABN stores each non-default session beneath:
 
 ```
-DATA_DIR/sessions/<WA_SESSION_ID>/
+DATA_DIR/tenants/<TENANT_ID>/sessions/<WA_SESSION_ID>/
 ```
 
-This allows multiple isolated WA-ABN process/container instances to use the same codebase without sharing linked-device credentials, state, history, scheduler queues or audit logs.
+Namespaced paths help prevent accidents, but **do not replace separate deployments, volumes, keys and permissions** for unrelated vendors.
 
 For high reliability, run one process/container per WhatsApp session. This preserves isolation and makes failures, upgrades and secrets easier to manage than putting every account inside one process.
 
@@ -244,7 +249,8 @@ Core principles:
 
 ```bash
 cp profiles/generic.env.example .env
-# configure WA_AUTH_ENCRYPTION_KEY and desired modules
+# configure unique TENANT_ID, WA_SESSION_ID, APP_ID, APP_NAME, BOT_DISPLAY_NAME
+# configure a unique WA_AUTH_ENCRYPTION_KEY and desired modules
 npm ci
 npm run build
 npm start
@@ -283,3 +289,7 @@ Applications should normally be created by:
 4. contributing reusable improvements back into WA-ABN.
 
 Avoid making a separate fork merely to rename the bot or change business context.
+
+## White-label vendor confidentiality
+
+WA-ABN is the internal upstream codebase. Customers see only their own vendor-branded dashboard and bot. Each vendor needs a distinct deployed service, storage volume, secrets, WhatsApp account, CRM, integrations and access controls. The core requires explicit TENANT_ID and WA_SESSION_ID and does not automatically adopt legacy shared storage. See [Vendor Confidentiality](docs/VENDOR_CONFIDENTIALITY.md) for migration and deployment guidance.
