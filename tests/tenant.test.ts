@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import test from "node:test";
-import { resolveTenantPaths, validateIsolationId } from "../src/tenant.js";
+import { claimTenantDataRoot, resolveTenantPaths, validateIsolationId } from "../src/tenant.js";
 
 test("different vendors and sessions have distinct private state and backup paths", () => {
   const a = resolveTenantPaths("/srv/private", "vendor-alpha", "primary");
@@ -30,4 +32,15 @@ test("tenant and session cannot escape the scoped directory", () => {
   }
   assert.equal(validateIsolationId("vendor-01", "TENANT_ID"), "vendor-01");
   assert.equal(validateIsolationId("primary", "WA_SESSION_ID"), "primary");
+});
+
+test("storage volumes may be reused only by their assigned vendor", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "wa-abn-tenant-"));
+  try {
+    claimTenantDataRoot(dir, "vendor-alpha");
+    claimTenantDataRoot(dir, "vendor-alpha");
+    assert.throws(() => claimTenantDataRoot(dir, "vendor-beta"), /belongs to another tenant/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
