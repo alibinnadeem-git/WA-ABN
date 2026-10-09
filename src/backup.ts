@@ -4,7 +4,7 @@ import { config } from "./config.js";
 import { audit } from "./audit.js";
 
 function backupsDir(): string {
-  return join(config.dataDir, "backups", config.sessionId);
+  return config.backupDir;
 }
 
 export function createBackup(): string {
