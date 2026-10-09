@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { config } from "./config.js";
+import { columnName } from "./sheet-columns.js";
 
 function client() {
   if (!config.features.leadCrm || !config.sheetId || !config.serviceAccount) {
@@ -46,7 +47,7 @@ export const HEADERS = [
 type Header = (typeof HEADERS)[number];
 export type LeadRow = Partial<Record<Header, string>>;
 
-const lastCol = String.fromCharCode("A".charCodeAt(0) + HEADERS.length - 1);
+const lastCol = columnName(HEADERS.length); // Handles columns after Z (currently AC), unlike one-character ASCII math.
 const range = (r: string) => `'${config.sheetTab}'!${r}`;
 let tabGid = 0;
 
@@ -86,16 +87,6 @@ export async function ensureSheet(): Promise<void> {
   }
 }
 
-function columnName(index: number): string {
-  let n = index;
-  let out = "";
-  while (n > 0) {
-    n--;
-    out = String.fromCharCode(65 + (n % 26)) + out;
-    n = Math.floor(n / 26);
-  }
-  return out;
-}
 
 const digits = (s: string) => s.replace(/\D/g, "");
 

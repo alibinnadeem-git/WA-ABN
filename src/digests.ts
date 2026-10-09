@@ -26,13 +26,25 @@ export async function buildDigest(): Promise<string> {
   return lines.join("\n");
 }
 
+// Reconnects replace the transport callback without registering duplicate intervals.
+let activeSender: ((jid: string, text: string) => Promise<void>) | null = null;
+let digestTimer: NodeJS.Timeout | null = null;
+
 export function startAutoDigest(send: (jid: string, text: string) => Promise<void>): void {
+  activeSender = send;
   if (!config.features.digests || config.autoDigestEveryHours <= 0 || config.allowedGroupJids.size === 0) return;
+  if (digestTimer) return;
   const intervalMs = config.autoDigestEveryHours * 3_600_000;
-  setInterval(async () => {
-    const text = await buildDigest();
-    for (const jid of config.allowedGroupJids) {
-      await send(jid, text).catch((err) => console.error("auto digest failed", err));
-    }
+  digestTimer = setInterval(() => {
+    void (async () => {
+      try {
+        const message = await buildDigest();
+        for (const jid of config.allowedGroupJids) {
+          await activeSender?.(jid, message).catch((error) => console.error("Automatic digest failed", error));
+        }
+      } catch (error) {
+        console.error("Automatic digest construction failed", error);
+      }
+    })();
   }, intervalMs);
 }

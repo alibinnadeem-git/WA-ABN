@@ -49,6 +49,7 @@ function loadState(): State {
 }
 const state = loadState();
 setCurrentEvent(state.event);
+export function currentLeadEvent(): string | null { return state.event; }
 const saveState = () => fs.writeFileSync(config.statePath, JSON.stringify(state, null, 2));
 
 const SKIP_WORDS = /^(skip|no|none|nope|n\/a|na|nothing|-)$/i;
@@ -89,6 +90,13 @@ export async function handleMessage(msg: IncomingMessage, chat: Chat): Promise<v
       return;
     }
     if (text.length < 3) return;
+  }
+
+  // The provider-free mode accepts explicit !lead commands only.
+  // Never invoke an AI provider or produce paid API calls when disabled.
+  if (!config.features.aiExtraction) {
+    if (hasMedia) await chat.reply("AI card reading is disabled. Please capture this lead with !lead Name | Company | Email | Phone | Notes.", msg.id);
+    return;
   }
 
   // 3. New message: does it contain a lead?

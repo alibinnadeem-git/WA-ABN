@@ -69,3 +69,7 @@ Customer deployments are fully white-labeled and isolated from one another. A ve
 ### Wider feature harvest
 
 See [ADVANCED_GATEWAY.md](ADVANCED_GATEWAY.md) for which high-impact free capabilities are implemented and which require additional adapters (full inbox, Chatwoot, Socket.IO, Swagger UI, official Cloud API, contact sync, catalogs, statuses, MCP and advanced opt-out registries). Features are tracked rather than rejected by default.
+
+### STRATUM-specific pilot
+
+The STRATUM Power configuration can run with `FEATURE_AI_EXTRACTION=false` and `!lead` structured WhatsApp capture (no Anthropic key), or with AI card intake/enrichment enabled using a vendor-only key. The manual path is available to all CRM profiles, not a STRATUM-only fork. See [STRATUM_LAUNCH.md](STRATUM_LAUNCH.md).
