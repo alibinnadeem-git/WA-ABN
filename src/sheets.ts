@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { config } from "./config.js";
+import { columnName } from "./sheet-columns.js";
 
 function client() {
   if (!config.features.leadCrm || !config.sheetId || !config.serviceAccount) {
@@ -86,16 +87,6 @@ export async function ensureSheet(): Promise<void> {
   }
 }
 
-function columnName(index: number): string {
-  let n = index;
-  let out = "";
-  while (n > 0) {
-    n--;
-    out = String.fromCharCode(65 + (n % 26)) + out;
-    n = Math.floor(n / 26);
-  }
-  return out;
-}
 
 const digits = (s: string) => s.replace(/\D/g, "");
 
