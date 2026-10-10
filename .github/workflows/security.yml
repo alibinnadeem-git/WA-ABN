@@ -33,6 +33,8 @@ jobs:
         run: |
           echo DATA_DIR=/data > "$RUNNER_TEMP/filter-crm-test.env"
           VENDOR_IMAGE=filter-crm-ci:smoke VENDOR_ENV_FILE="$RUNNER_TEMP/filter-crm-test.env" docker compose -f deploy/vendor.compose.yml config --quiet
+      - name: Build production container image
+        run: docker build --file Dockerfile --tag podium-crm-ci:test .
       - run: npm audit --audit-level=high
 
   semgrep:
