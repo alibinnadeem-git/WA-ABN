@@ -58,7 +58,7 @@ export async function handleFilterChat(turn: FilterChatTurn): Promise<boolean> {
     if (!arg) { await respond("Usage: !source <ID>"); return true; }
     const source = filterSourceRegistry()?.getForGroup(arg,turn.groupJid);
     await respond(source
-      ? `*Source: ${source.fileName || source.kind}*\nType: ${source.mimeType || source.kind}\nStatus: ${source.processing}\nCaption: ${source.caption || "None"}\nText extract: ${source.excerpt || "Not available — file may require a parser or manual review."}\nHash: ${source.contentHash || "not available"}`
+      ? `*Source: ${source.fileName || source.kind}*\nType: ${source.mimeType || source.kind}\nStatus: ${source.processing}\nCaption: ${source.caption || "None"}\nText extract: ${source.excerpt?.slice(0,2000) || "Not available — file may require a parser or manual review."}\nHash: ${source.contentHash || "not available"}`
       : "Source not found in this group.");
     return true;
   }
