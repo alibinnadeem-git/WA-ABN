@@ -24,7 +24,7 @@ export class FilterSourceRegistry {
   constructor(private readonly file: string) {
     if (existsSync(file)) {
       const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
-      if (!Array.isArray(parsed)) throw new Error("Invalid Filter CRM source registry");
+      if (!Array.isArray(parsed)) throw new Error("Invalid Podium CRM source registry");
       this.items = parsed as WhatsAppSource[];
     }
   }
