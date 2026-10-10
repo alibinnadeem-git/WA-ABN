@@ -53,13 +53,22 @@ export class FilterQueue {
     return found;
   }
   stage(lead: FilterLeadInput, source: string): FilterEntry {
-    if (!lead.name?.trim() || !(lead.email || lead.phone)) throw new Error("Filter lead needs name, company and email/phone");
+    if (!lead.name?.trim()) throw new Error("Filter lead name or source label is required");
+    if (lead.name.length > 160 || (lead.company ?? "").length > 160 || (lead.email ?? "").length > 254
+      || (lead.phone ?? "").length > 40) throw new Error("Filter lead exceeds field limits");
     const sourceMessageId = lead.sourceMessageId;
     if (sourceMessageId) {
       const previous = this.entries.find((e) => e.lead.sourceMessageId === sourceMessageId);
       if (previous) return previous;
     }
     const classification = classifyStratumLead(lead);
+    // Keep incomplete identities visible in the review queue but never send
+    // a record without an identifier that STRATUM can reconcile.
+    if (!lead.email && !lead.phone) {
+      classification.disposition = "NEEDS_REVIEW";
+      classification.reasons.push("Missing contact email or telephone");
+      classification.score = Math.min(classification.score, 0.3);
+    }
     const item: FilterEntry = {
       id: randomUUID(),
       lead: { name: lead.name.trim(), company: (lead.company ?? "").trim(), email: lead.email.trim().toLowerCase(), phone: lead.phone.trim(), notes: lead.notes.slice(0, 3000), sourceMessageId: lead.sourceMessageId, capturedAt: lead.capturedAt ?? new Date().toISOString() },
@@ -77,6 +86,9 @@ export class FilterQueue {
     if (item.delivery === "delivered" || item.delivery === "sending" || item.delivery === "needs_crm_review") throw new Error("Imported/in-flight lead cannot be reclassified here");
     if (!["STRATUM_RELATED", "UNRELATED", "NEEDS_REVIEW"].includes(disposition)) throw new Error("Invalid decision");
     if (!reviewer.trim() || reviewer.length > 150 || !note.trim() || note.length > 500) throw new Error("Reviewer and decision rationale required");
+    if (disposition === "STRATUM_RELATED" && !item.lead.email && !item.lead.phone) {
+      throw new Error("Cannot approve transfer without email or phone");
+    }
     item.disposition = disposition;
     item.approvedBy = disposition === "STRATUM_RELATED" ? reviewer.trim() : undefined;
     item.approvedAt = disposition === "STRATUM_RELATED" ? new Date().toISOString() : undefined;
@@ -97,7 +109,7 @@ export class FilterQueue {
     if (!endpoint || !secret || secret.length < 32 || !allowedHost) throw new Error("STRATUM CRM webhook not configured");
     const url = new URL(endpoint);
     if (url.protocol !== "https:" || url.username || url.password || url.hostname !== allowedHost ||
-      url.pathname !== "/api/integrations/filter-crm/leads" || url.search || url.hash) throw new Error("Unsafe or unapproved STRATUM CRM endpoint");
+      url.pathname !== "/api/integrations/filter-crm/leads" || url.port || url.search || url.hash) throw new Error("Unsafe or unapproved STRATUM CRM endpoint");
 
     const payload = JSON.stringify({
       version: 1, source: "wa-abn-filter-crm", tenant: "stratum",
