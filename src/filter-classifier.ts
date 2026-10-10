@@ -6,6 +6,8 @@ export interface FilterLeadInput {
   phone: string;
   notes: string;
   sourceMessageId?: string;
+  sourceGroupJid?: string;
+  sourceSenderJid?: string;
   capturedAt?: string;
 }
 
