@@ -75,3 +75,10 @@ export function splitAskArgument(raw: string): { lead: string; question: string 
   if (!lead || question.length < 3 || question.length > 500) return null;
   return { lead, question };
 }
+
+/** Only a grammatical question quoting an actual scoped lead source may trigger a bot reply. */
+export function isQuotedLeadQuestion(text: string, hasQuotedLead: boolean): boolean {
+  const raw = text.trim();
+  return hasQuotedLead && raw.length <= 500 &&
+    /^(?:what|who|why|where|when|how|is|was|has|did|can|does|which)\b/i.test(raw) && raw.endsWith("?");
+}
