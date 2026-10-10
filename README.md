@@ -327,4 +327,6 @@ Podium CRM requires no Google Sheet or second CRM database. The existing private
 
 Only plain-text attachments are indexed directly; PDFs/Office files, audio and video currently receive **source-metadata intake** and require additional parsers/transcription to answer content questions. AI image/vCard capture is optional with external provider costs. No live linked-device UAT is claimed.
 
-**WhatsApp UX details and test scenarios:** [docs/FILTER_CRM_WHATSAPP_UX.md](docs/FILTER_CRM_WHATSAPP_UX.md). **Signed STRATUM routing contract:** [docs/FILTER_CRM_STRATUM_ROUTING.md](docs/FILTER_CRM_STRATUM_ROUTING.md). **Standalone profile:** `profiles/stratum-filter-crm.env.example`.
+**WhatsApp UX details and test scenarios:** [docs/FILTER_CRM_WHATSAPP_UX.md](docs/FILTER_CRM_WHATSAPP_UX.md). **Signed STRATUM routing contract:** [docs/FILTER_CRM_STRATUM_ROUTING.md](docs/FILTER_CRM_STRATUM_ROUTING.md). **Standalone profile:** `profiles/podium-crm.env.example`.
+
+**Compatibility:** Podium CRM is the new product name; the existing `FEATURE_FILTER_CRM` flag, `/v1/filter/*` routes and the STRATUM CRM signed webhook contract remain unchanged until a separately tested API migration.
