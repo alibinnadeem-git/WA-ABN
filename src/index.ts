@@ -23,7 +23,8 @@ import { startAutoDigest } from "./digests.js";
 import { startAdvancedApi } from "./gateway.js";
 import { handleFilterOnlyIntake } from "./filter-intake.js";
 import { handleFilterChat } from "./filter-chat.js";
-import { filterSourceRegistry } from "./filter-runtime.js";
+import { filterSourceRegistry, stageFilterLead } from "./filter-runtime.js";
+import { passiveLeadFromText } from "./filter-text-intent.js";
 import { safeSourceText } from "./filter-sources.js";
 import { authorizedRecipient } from "./gateway-policy.js";
 import { publishGatewayEvent } from "./gateway-events.js";
@@ -253,6 +254,7 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
   // Unsupported binary formats get honest metadata-only status, not fake extracted facts.
   let sourceNotice: string | null = null;
   let sourceRecorded = false;
+  let textFromDocument: string | null = null;
   if (config.features.filterCrm) {
     const registry = filterSourceRegistry();
     if (registry) {
@@ -287,6 +289,7 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
             if (downloaded.length <= 1024 * 1024) {
               fileData = downloaded;
               extractedText = safeSourceText(downloaded, mime);
+              textFromDocument = extractedText;
             }
           } catch (error) {
             console.error("Filter CRM document text extraction unavailable",
@@ -364,6 +367,20 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
       quotedMessageId: quotedId,
     });
     if (consumed) return;
+    // Human group discussions are left intact. Only explicit contact/lead cues
+    // plus a usable email/phone may initiate passive, review-only capture.
+    const candidate = passiveLeadFromText(textFromDocument ?? input.text ?? "");
+    if (candidate) {
+      const created = stageFilterLead({
+        ...candidate, sourceMessageId: id, sourceGroupJid: jid, sourceSenderJid: sender,
+      }, textFromDocument ? "WhatsApp text attachment" : "WhatsApp group lead mention");
+      if (created) {
+        await sock.sendMessage(jid, {
+          text: `Filter CRM captured a possible lead: ${created.lead.name}.\\nClassification: ${created.disposition}; ID: ${created.id}\\nPending review. Nothing has been sent to STRATUM CRM.\\nAsk: !ask ${created.id} | Why is this relevant?`,
+        }, { quoted: m });
+        return;
+      }
+    }
   }
 
   if (!config.features.leadCrm) {
