@@ -23,6 +23,12 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
+      - name: Reject Dockerfile VOLUME on Railway
+        run: |
+          if grep -nE '^[[:space:]]*VOLUME([[:space:]]|$)' Dockerfile; then
+            echo 'Do not declare Docker VOLUME; configure persistent storage through Railway or Compose mounts.' >&2
+            exit 1
+          fi
       - name: Validate vendor Compose syntax
         run: |
           echo DATA_DIR=/data > "$RUNNER_TEMP/filter-crm-test.env"
