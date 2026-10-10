@@ -31,7 +31,10 @@ export async function handleFilterChat(turn: FilterChatTurn): Promise<boolean> {
   const arg = parts.join(" ").trim();
   const addressed = parseConversationalQuestion(raw);
   const supported = ["!filter", "!leads", "!ask", "!review", "!dispatch", "!sendapproved", "!sources", "!source"];
-  if (!supported.includes(cmd) && addressed === null) return false;
+  // A short question replying to a lead-source WhatsApp message is also an explicit request.
+  const quotedQuestion = Boolean(turn.quotedMessageId &&
+    /^(?:what|who|why|where|when|how|is|was|has|did|can|does|which)\\b/i.test(raw) && raw.endsWith("?"));
+  if (!supported.includes(cmd) && addressed === null && !quotedQuestion) return false;
   const respond = async (message: string): Promise<void> => {
     await turn.sock.sendMessage(turn.groupJid, { text: message }, { quoted: turn.message });
   };
@@ -121,6 +124,8 @@ export async function handleFilterChat(turn: FilterChatTurn): Promise<boolean> {
   } else if (addressed !== null) {
     question = addressed;
     leadSubject = naturalSubject(addressed,entries.map((e)=>e.lead.name));
+  } else if (quotedQuestion) {
+    question = raw;
   }
   if (question.length < 3) { await respond("Ask a specific question about a named lead."); return true; }
   const { match, ambiguous } = findLead(entries,turn.groupJid,leadSubject,turn.quotedMessageId);
