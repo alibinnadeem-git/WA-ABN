@@ -10,7 +10,7 @@ services:
       - ${VENDOR_ENV_FILE:?Set a vendor-specific absolute path to its application.env}
     restart: unless-stopped
     read_only: true
-    user: node
+    # Entrypoint briefly fixes root-owned /data, then gosu runs the app as node.
     cap_drop:
       - ALL
     security_opt:
