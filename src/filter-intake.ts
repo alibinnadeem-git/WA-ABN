@@ -14,7 +14,7 @@ export async function handleFilterOnlyIntake(
   const explicitText = input.text?.trim().startsWith("!capture ");
   if (!explicitText && input.images.length === 0 && input.vcards.length === 0) return;
   if (!config.features.aiExtraction) {
-    await reply("Filter CRM recorded this source, but AI card/contact extraction is disabled. Capture a lead with !lead Name | Company | Email | Phone | Notes.");
+    await reply("Podium CRM recorded this source, but AI card/contact extraction is disabled. Capture a lead with !lead Name | Company | Email | Phone | Notes.");
     return;
   }
   const requested: MessageInput = explicitText
@@ -24,12 +24,12 @@ export async function handleFilterOnlyIntake(
   try {
     extraction = await extractLeads(requested);
   } catch (error) {
-    console.error("Filter CRM extraction failed", error instanceof Error ? error.name : "unknown");
-    await reply("Filter CRM received the source but could not extract a lead. Please use !lead or request manual review.");
+    console.error("Podium CRM extraction failed", error instanceof Error ? error.name : "unknown");
+    await reply("Podium CRM received the source but could not extract a lead. Please use !lead or request manual review.");
     return;
   }
   if (!extraction.is_lead || !extraction.leads.length) {
-    await reply("Filter CRM: no contact was extracted. Please use !lead Name | Company | Email | Phone | Notes.");
+    await reply("Podium CRM: no contact was extracted. Please use !lead Name | Company | Email | Phone | Notes.");
     return;
   }
   const outputs: string[] = [];
@@ -43,11 +43,11 @@ export async function handleFilterOnlyIntake(
       sourceMessageId: sourceMessageId + ":" + index,
       sourceGroupJid: groupJid,
       sourceSenderJid: senderJid,
-    }, "Filter CRM AI intake");
+    }, "Podium CRM AI intake");
     if (staged) outputs.push(
       `${staged.lead.name} → ${staged.disposition} · Filter ID ${staged.id} · awaiting reviewer action`
     );
   }
   if (outputs.length) filterSourceRegistry()?.markLeadExtracted(groupJid, sourceMessageId);
-  await reply("Filter CRM staged (nothing sent to STRATUM CRM):\n" + outputs.join("\n"));
+  await reply("Podium CRM staged (nothing sent to STRATUM CRM):\n" + outputs.join("\n"));
 }
