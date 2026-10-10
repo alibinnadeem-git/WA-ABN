@@ -86,8 +86,8 @@ export class FilterQueue {
     if (item.delivery === "delivered" || item.delivery === "sending" || item.delivery === "needs_crm_review") throw new Error("Imported/in-flight lead cannot be reclassified here");
     if (!["STRATUM_RELATED", "UNRELATED", "NEEDS_REVIEW"].includes(disposition)) throw new Error("Invalid decision");
     if (!reviewer.trim() || reviewer.length > 150 || !note.trim() || note.length > 500) throw new Error("Reviewer and decision rationale required");
-    if (disposition === "STRATUM_RELATED" && !item.lead.email && !item.lead.phone) {
-      throw new Error("Cannot approve transfer without email or phone");
+    if (disposition === "STRATUM_RELATED" && (!item.lead.email && !item.lead.phone || item.lead.name === "Unidentified contact")) {
+      throw new Error("Cannot approve transfer without a verified contact name and email/phone");
     }
     item.disposition = disposition;
     item.approvedBy = disposition === "STRATUM_RELATED" ? reviewer.trim() : undefined;
