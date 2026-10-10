@@ -205,7 +205,7 @@ export function startAdvancedApi(socket: () => WASocket | null): void {
       if (req.method !== "POST") { reply(res, 404, { error: "Not found" }); return; }
       const body = await readBody(req);
 
-      const filterAction = url.pathname.match(/^\\/v1\\/filter\\/leads\\/([a-f0-9-]{36})\\/(decision|dispatch)$/);
+      const filterAction = url.pathname.match(new RegExp("^/v1/filter/leads/([a-f0-9-]{36})/(decision|dispatch)$"));
       if (filterAction) {
         requireRole("admin");
         const queue = filterCrmQueue();
