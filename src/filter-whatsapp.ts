@@ -17,14 +17,16 @@ export function findLead(
     const byId = scoped.find((e) => e.id.toLowerCase() === needle || e.id.toLowerCase().startsWith(needle));
     if (byId) return { match: byId, ambiguous: false };
   }
+  if (needle) {
+    const matches = scoped.filter((e) => [e.lead.name,e.lead.company].some((v) => v.toLowerCase().includes(needle)));
+    if (matches.length) return { match: matches.length === 1 ? matches[0] : null, ambiguous: matches.length > 1 };
+  }
   if (quotedMessageId) {
     const matches = scoped.filter((e) => e.lead.sourceMessageId?.split(":")[0] === quotedMessageId);
     if (matches.length === 1) return { match: matches[0], ambiguous: false };
     if (matches.length > 1) return { match: null, ambiguous: true };
   }
-  if (!needle) return { match: null, ambiguous: false };
-  const matches = scoped.filter((e) => [e.lead.name, e.lead.company].some((v) => v.toLowerCase().includes(needle)));
-  return { match: matches.length === 1 ? matches[0] : null, ambiguous: matches.length > 1 };
+  return { match: null, ambiguous: false };
 }
 
 export function conciseLead(entry: FilterEntry): string {
