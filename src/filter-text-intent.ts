@@ -12,8 +12,10 @@ export function passiveLeadFromText(raw: string): FilterLeadInput | null {
   if (!CONTEXT_CUE.test(text) || text.startsWith("!") || !text) return null;
   const email = text.match(EMAIL)?.[0].toLowerCase() ?? "";
   const phone = text.match(PHONE)?.[0].trim() ?? "";
-  if (!email && !phone) return null;
   const name = text.match(NAME)?.[1]?.trim() ?? "Unidentified contact";
   const company = text.match(COMPANY)?.[1]?.trim() ?? "";
+  // Contactless introductions still matter: stage only when BOTH named person
+  // and explicitly labeled company exist, never treat casual mentions as qualified.
+  if (!email && !phone && (name === "Unidentified contact" || !company)) return null;
   return { name, company, email, phone, notes: text.slice(0,2000) };
 }
