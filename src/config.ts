@@ -214,14 +214,8 @@ if ((config.features.campaigns || config.features.groupAdmin || config.features.
   throw new Error("Advanced features require FEATURE_ADVANCED_API=true");
 }
 
-if (config.features.filterCrm && !config.features.leadCrm) {
-  throw new Error("Filter CRM requires FEATURE_LEAD_CRM=true for existing lead intake");
-}
 if (config.features.filterCrm && !config.features.advancedApi) {
   throw new Error("Filter CRM reviewer API requires FEATURE_ADVANCED_API=true");
-}
-if (config.features.filterCrm && config.tenantId !== "stratum") {
-  throw new Error("STRATUM Filter CRM must run in its isolated stratum tenant");
 }
 if (config.filterCrmAutoDispatch && !config.features.filterCrm) {
   throw new Error("Auto dispatch requires Filter CRM");
