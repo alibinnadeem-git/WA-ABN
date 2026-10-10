@@ -2,7 +2,7 @@ import type { WAMessage, WASocket } from "baileys";
 import { config } from "./config.js";
 import { audit } from "./audit.js";
 import { filterCrmQueue, filterSourceRegistry } from "./filter-runtime.js";
-import { answerLeadQuestion, conciseLead, findLead, groupLeads, parseConversationalQuestion, splitAskArgument } from "./filter-whatsapp.js";
+import { answerLeadQuestion, conciseLead, findLead, groupLeads, isQuotedLeadQuestion, parseConversationalQuestion, splitAskArgument } from "./filter-whatsapp.js";
 import { sourceSummary } from "./filter-sources.js";
 import type { FilterDisposition } from "./filter-classifier.js";
 
@@ -34,8 +34,7 @@ export async function handleFilterChat(turn: FilterChatTurn): Promise<boolean> {
   const entries = groupLeads(queue.list(), turn.groupJid);
   const hasQuotedLead = Boolean(turn.quotedMessageId && findLead(entries, turn.groupJid, "", turn.quotedMessageId).match);
   // A short question replying to a lead-source WhatsApp message is also an explicit request.
-  const quotedQuestion = Boolean(hasQuotedLead &&
-    /^(?:what|who|why|where|when|how|is|was|has|did|can|does|which)\\b/i.test(raw) && raw.endsWith("?"));
+  const quotedQuestion = isQuotedLeadQuestion(raw, hasQuotedLead);
   if (!supported.includes(cmd) && addressed === null && !quotedQuestion) return false;
   const respond = async (message: string): Promise<void> => {
     await turn.sock.sendMessage(turn.groupJid, { text: message }, { quoted: turn.message });
