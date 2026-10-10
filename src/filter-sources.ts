@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 
 export type SourceKind = "image" | "vcard" | "document" | "audio" | "video" | "link" | "text";
-export type SourceProcessing = "text_indexed" | "metadata_indexed" | "needs_extraction";
+export type SourceProcessing = "text_indexed" | "metadata_indexed" | "needs_extraction" | "lead_extracted";
 export interface WhatsAppSource {
   id: string;
   groupJid: string;
@@ -57,6 +57,12 @@ export class FilterSourceRegistry {
     this.items.push(item);
     this.persist();
     return item;
+  }
+  markLeadExtracted(groupJid: string, messageId: string): void {
+    const matching = this.items.filter((s) => s.groupJid === groupJid && s.messageId === messageId);
+    if (!matching.length) return;
+    for (const s of matching) s.processing = "lead_extracted";
+    this.persist();
   }
   forGroup(groupJid: string, limit=15): WhatsAppSource[] {
     return this.items.filter((s)=>s.groupJid===groupJid).slice(-Math.min(Math.max(limit,1),100)).reverse();
