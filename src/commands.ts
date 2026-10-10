@@ -166,6 +166,7 @@ export async function handlePlatformCommand(input: CommandInput): Promise<boolea
       const filtered = stageFilterLead({
         name: lead.name, company: lead.company, email: lead.email, phone: lead.phone,
         notes: lead.notes, sourceMessageId: input.message.key.id ?? undefined,
+        sourceGroupJid: input.jid, sourceSenderJid: input.sender,
       }, "WhatsApp manual capture");
       if (!config.features.leadCrm) {
         await reply(input.sock, input.jid, input.message,
