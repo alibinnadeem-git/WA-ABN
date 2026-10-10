@@ -48,5 +48,6 @@ export async function handleFilterOnlyIntake(
       `${staged.lead.name} → ${staged.disposition} · Filter ID ${staged.id} · awaiting reviewer action`
     );
   }
+  if (outputs.length) filterSourceRegistry()?.markLeadExtracted(groupJid, sourceMessageId);
   await reply("Filter CRM staged (nothing sent to STRATUM CRM):\n" + outputs.join("\n"));
 }
