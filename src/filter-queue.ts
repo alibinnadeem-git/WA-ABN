@@ -53,7 +53,7 @@ export class FilterQueue {
     return found;
   }
   stage(lead: FilterLeadInput, source: string): FilterEntry {
-    if (!lead.name?.trim() || !lead.company?.trim() || !(lead.email || lead.phone)) throw new Error("Filter lead needs name, company and email/phone");
+    if (!lead.name?.trim() || !(lead.email || lead.phone)) throw new Error("Filter lead needs name, company and email/phone");
     const sourceMessageId = lead.sourceMessageId;
     if (sourceMessageId) {
       const previous = this.entries.find((e) => e.lead.sourceMessageId === sourceMessageId);
@@ -62,7 +62,7 @@ export class FilterQueue {
     const classification = classifyStratumLead(lead);
     const item: FilterEntry = {
       id: randomUUID(),
-      lead: { name: lead.name.trim(), company: lead.company.trim(), email: lead.email.trim().toLowerCase(), phone: lead.phone.trim(), notes: lead.notes.slice(0, 3000), sourceMessageId: lead.sourceMessageId, capturedAt: lead.capturedAt ?? new Date().toISOString() },
+      lead: { name: lead.name.trim(), company: (lead.company ?? "").trim(), email: lead.email.trim().toLowerCase(), phone: lead.phone.trim(), notes: lead.notes.slice(0, 3000), sourceMessageId: lead.sourceMessageId, capturedAt: lead.capturedAt ?? new Date().toISOString() },
       source, ...classification,
       createdAt: new Date().toISOString(),
       delivery: classification.disposition === "UNRELATED" ? "not_eligible" : "awaiting_review",
@@ -74,7 +74,7 @@ export class FilterQueue {
   }
   decide(id: string, reviewer: string, disposition: FilterDisposition, note: string): FilterEntry {
     const item = this.get(id);
-    if (item.delivery === "delivered" || item.delivery === "sending") throw new Error("Imported/in-flight lead cannot be reclassified here");
+    if (item.delivery === "delivered" || item.delivery === "sending" || item.delivery === "needs_crm_review") throw new Error("Imported/in-flight lead cannot be reclassified here");
     if (!["STRATUM_RELATED", "UNRELATED", "NEEDS_REVIEW"].includes(disposition)) throw new Error("Invalid decision");
     if (!reviewer.trim() || reviewer.length > 150 || !note.trim() || note.length > 500) throw new Error("Reviewer and decision rationale required");
     item.disposition = disposition;
