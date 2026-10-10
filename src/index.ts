@@ -22,6 +22,9 @@ import { startScheduler } from "./scheduler.js";
 import { startAutoDigest } from "./digests.js";
 import { startAdvancedApi } from "./gateway.js";
 import { handleFilterOnlyIntake } from "./filter-intake.js";
+import { handleFilterChat } from "./filter-chat.js";
+import { filterSourceRegistry } from "./filter-runtime.js";
+import { safeSourceText } from "./filter-sources.js";
 import { authorizedRecipient } from "./gateway-policy.js";
 import { publishGatewayEvent } from "./gateway-events.js";
 
@@ -246,7 +249,90 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
     if (c.vcard) input.vcards.push(c.vcard);
   }
 
-  if (!input.text && !input.images.length && !input.vcards.length) return;
+  // Filter CRM observes approved group media without mistaking all chat/media for a lead.
+  // Unsupported binary formats get honest metadata-only status, not fake extracted facts.
+  let sourceNotice: string | null = null;
+  let sourceRecorded = false;
+  if (config.features.filterCrm) {
+    const registry = filterSourceRegistry();
+    if (registry) {
+      if (media && input.images.length > 0) {
+        registry.record({
+          groupJid: jid, messageId: id, senderJid: sender, kind: "image",
+          mimeType: media.mimetype ?? "image/jpeg", fileName: null,
+          caption: media.caption ?? "", processing: config.features.aiExtraction ? "needs_extraction" : "metadata_indexed",
+          body: input.images[0].data,
+        });
+        sourceRecorded = true;
+      }
+      if (input.vcards.length) {
+        registry.record({
+          groupJid: jid, messageId: id, senderJid: sender, kind: "vcard",
+          mimeType: "text/vcard", fileName: null, caption: input.text ?? "",
+          processing: "text_indexed", extractedText: input.vcards.join("\n").slice(0,8000),
+        });
+        sourceRecorded = true;
+      }
+      const document = content.documentMessage;
+      if (document && !docImage) {
+        const mime = (document.mimetype ?? "application/octet-stream").split(";")[0].toLowerCase();
+        const declaredSize = Number(document.fileLength ?? 0);
+        let fileData: Buffer | null = null;
+        let extractedText: string | null = null;
+        if (["text/plain", "text/csv", "text/vcard", "application/json"].includes(mime)
+          && declaredSize <= Math.min(config.maxImageBytes, 1024 * 1024)) {
+          try {
+            const downloaded = await downloadMediaMessage(m, "buffer", {},
+              { logger, reuploadRequest: sock.updateMediaMessage });
+            if (downloaded.length <= 1024 * 1024) {
+              fileData = downloaded;
+              extractedText = safeSourceText(downloaded, mime);
+            }
+          } catch (error) {
+            console.error("Filter CRM document text extraction unavailable",
+              error instanceof Error ? error.name : "unknown");
+          }
+        }
+        registry.record({
+          groupJid: jid, messageId: id, senderJid: sender, kind: "document",
+          mimeType: mime, fileName: document.fileName ?? null, caption: document.caption ?? "",
+          processing: extractedText ? "text_indexed" : "needs_extraction",
+          body: fileData, extractedText,
+        });
+        sourceRecorded = true;
+        if (extractedText && config.features.aiExtraction) {
+          input.text = "!capture " + extractedText;
+        } else {
+          sourceNotice = extractedText
+            ? "Filter CRM indexed text from this document. To capture a contact, use !lead Name | Company | Email | Phone | Notes."
+            : "Filter CRM recorded this file's metadata, but its contents need a supported document parser or manual review. Nothing was invented or sent to STRATUM CRM.";
+        }
+      }
+      const video = content.videoMessage;
+      const audio = content.audioMessage;
+      if (video || audio) {
+        const part = video ?? audio!;
+        registry.record({
+          groupJid: jid, messageId: id, senderJid: sender, kind: video ? "video" : "audio",
+          mimeType: part.mimetype ?? null, fileName: null, caption: video?.caption ?? "",
+          processing: "needs_extraction",
+        });
+        sourceRecorded = true;
+        sourceNotice = "Filter CRM registered this media source. Audio/video transcription or content extraction has not been enabled; it will not be treated as a verified lead.";
+      }
+      if (input.text && /^(?:source:|!sourceadd\s)/i.test(input.text.trim())) {
+        registry.record({
+          groupJid: jid, messageId: id, senderJid: sender, kind: "text",
+          mimeType: "text/plain", fileName: null, caption: input.text.trim(),
+          processing: "text_indexed", extractedText: input.text.trim(),
+        });
+        sourceRecorded = true;
+        sourceNotice = "Filter CRM recorded this source note. Ask about a lead with !ask Name | question, or capture one with !lead.";
+      }
+    }
+  }
+
+  if (!input.text && !input.images.length && !input.vcards.length && !sourceRecorded) return;
 
   if (config.features.eventStream) publishGatewayEvent("whatsapp.message_received", { jid, id, sender, hasMedia: input.images.length > 0 || input.vcards.length > 0 });
   recordHistory({
@@ -272,8 +358,21 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
     if (handled) return;
   }
 
+  if (config.features.filterCrm) {
+    const consumed = await handleFilterChat({
+      sock, message: m, groupJid: jid, senderJid: sender, text: input.text ?? "",
+      quotedMessageId: quotedId,
+    });
+    if (consumed) return;
+  }
+
   if (!config.features.leadCrm) {
-    await handleFilterOnlyIntake(input, id, async (message) => {
+    if (config.features.filterCrm && sourceNotice && !input.images.length && !input.vcards.length
+      && !input.text?.startsWith("!capture ")) {
+      await sock.sendMessage(jid, { text: sourceNotice }, { quoted: m });
+      return;
+    }
+    await handleFilterOnlyIntake(input, id, jid, sender, async (message) => {
       await sock.sendMessage(jid, { text: message }, { quoted: m });
     });
     return;
