@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { answerLeadQuestion, findLead, groupLeads, parseConversationalQuestion, splitAskArgument } from "../src/filter-whatsapp.js";
+import { answerLeadQuestion, findLead, groupLeads, isQuotedLeadQuestion, parseConversationalQuestion, splitAskArgument } from "../src/filter-whatsapp.js";
 import type { FilterEntry } from "../src/filter-queue.js";
 
 function sample(id:string,group:string,name:string): FilterEntry {
@@ -31,4 +31,12 @@ test("natural questions need deliberate bot address and never intercept chatter"
  assert.equal(parseConversationalQuestion("Filter: what do we know about Jane?"),"what do we know about Jane?");
  assert.deepEqual(splitAskArgument("Jane | Why is this relevant?"),{lead:"Jane",question:"Why is this relevant?"});
  assert.equal(splitAskArgument("Jane"),null);
+});
+
+test("Only quoted questions about an indexed lead wake the WhatsApp bot",()=>{
+ assert.equal(isQuotedLeadQuestion("What is their email?",true),true);
+ assert.equal(isQuotedLeadQuestion("Why is it relevant?",true),true);
+ assert.equal(isQuotedLeadQuestion("What is their email?",false),false);
+ assert.equal(isQuotedLeadQuestion("Thanks, let us discuss later",true),false);
+ assert.equal(isQuotedLeadQuestion("Hello group?",true),false);
 });
