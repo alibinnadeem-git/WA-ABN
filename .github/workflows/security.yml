@@ -35,6 +35,12 @@ jobs:
           VENDOR_IMAGE=filter-crm-ci:smoke VENDOR_ENV_FILE="$RUNNER_TEMP/filter-crm-test.env" docker compose -f deploy/vendor.compose.yml config --quiet
       - name: Build production container image
         run: docker build --file Dockerfile --tag podium-crm-ci:test .
+      - name: Smoke-test durable volume with non-root worker
+        run: |
+          docker volume create podium-crm-ci-data
+          trap 'docker volume rm podium-crm-ci-data' EXIT
+          docker run --rm -v podium-crm-ci-data:/data podium-crm-ci:test node --input-type=module -e 'import fs from "node:fs"; if (process.getuid() === 0) process.exit(1); fs.writeFileSync("/data/.ci-probe", "persisted")'
+          docker run --rm -v podium-crm-ci-data:/data podium-crm-ci:test node --input-type=module -e 'import fs from "node:fs"; if (fs.readFileSync("/data/.ci-probe", "utf8") !== "persisted") process.exit(1)'
       - run: npm audit --audit-level=high
 
   semgrep:
