@@ -32,7 +32,7 @@ export function assessFilterReadiness(input: FilterReadinessInput): FilterReadin
   const add = (id: string, condition: boolean, detail: string) =>
     checks.push({ id, status: condition ? "pass" : "blocker", detail });
   add("standalone-filter", input.filterCrmEnabled && !input.sheetsCrmEnabled,
-    "Standalone Filter CRM enabled without an additional Google Sheets CRM");
+    "Standalone Podium CRM enabled without an additional Google Sheets CRM");
   add("private-reviewer-api", input.advancedApiEnabled,
     "Separate administrator API enabled (loopback-bound credentials validated at startup)");
   add("approved-whatsapp-groups",
@@ -56,7 +56,7 @@ export function assessFilterReadiness(input: FilterReadinessInput): FilterReadin
   add("shared-hmac-credential", input.secretPresent && input.secretLength >= 32,
     "Receiver/sender matching private HMAC secret must be provisioned (no value printed)");
   add("persistent-storage", input.dataWritable,
-    "Filter CRM state directory must be writable on a dedicated persistent volume");
+    "Podium CRM state directory must be writable on a dedicated persistent volume");
   if (input.aiEnabled) add("ai-provider", input.aiProviderReady,
     "AI extraction enabled; private provider credential must be available");
   if (input.autoDispatch) checks.push({
