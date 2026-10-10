@@ -21,6 +21,7 @@ import { recordHistory } from "./history.js";
 import { startScheduler } from "./scheduler.js";
 import { startAutoDigest } from "./digests.js";
 import { startAdvancedApi } from "./gateway.js";
+import { handleFilterOnlyIntake } from "./filter-intake.js";
 import { authorizedRecipient } from "./gateway-policy.js";
 import { publishGatewayEvent } from "./gateway-events.js";
 
@@ -271,7 +272,12 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
     if (handled) return;
   }
 
-  if (!config.features.leadCrm) return;
+  if (!config.features.leadCrm) {
+    await handleFilterOnlyIntake(input, id, async (message) => {
+      await sock.sendMessage(jid, { text: message }, { quoted: m });
+    });
+    return;
+  }
 
   const incoming: IncomingMessage = {
     id,
