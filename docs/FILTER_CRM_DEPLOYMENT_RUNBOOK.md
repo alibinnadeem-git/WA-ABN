@@ -1,6 +1,6 @@
-# Filter CRM → STRATUM CRM: Private Pilot Deployment Runbook
+# Podium CRM → STRATUM CRM: Private Pilot Deployment Runbook
 
-**Phase:** Deploy a dedicated, persistent Filter CRM worker only after secure credentials and an approved WhatsApp test account are available. The existing STRATUM CRM receiver is deployed separately on Vercel.
+**Phase:** Deploy a dedicated, persistent Podium CRM worker only after secure credentials and an approved WhatsApp test account are available. The existing STRATUM CRM receiver is deployed separately on Vercel.
 
 ## Verified receiving service
 
@@ -12,21 +12,21 @@
 
 ## Why the Filter worker must not be deployed as a Vercel function
 
-WA-ABN uses Baileys linked-device WebSocket, encrypted on-disk WhatsApp credentials, a durable per-vendor Filter CRM queue and source registry, and a long-lived process. Standard short-lived serverless functions are not a reliable home for that workload. Deploy Filter CRM to an always-on, vendor-private container host with persistent storage instead. No connected Filter CRM container host has yet been selected or deployed.
+WA-ABN uses Baileys linked-device WebSocket, encrypted on-disk WhatsApp credentials, a durable per-vendor Podium CRM queue and source registry, and a long-lived process. Standard short-lived serverless functions are not a reliable home for that workload. Deploy Podium CRM to an always-on, vendor-private container host with persistent storage instead. No connected Podium CRM container host has yet been selected or deployed.
 
 The Dockerfile and `deploy/vendor.compose.yml` provide a hardened starting point. Vendor storage is mounted at `/data`. The **container environment must say `DATA_DIR=/data`**, not `./data` (which is read-only in the production image).
 
 ## Preparation on approved container host
 
-1. Assign a unique virtual machine/container host or isolated project to Filter CRM, with private disk encryption, backup policy and outbound TLS access.
+1. Assign a unique virtual machine/container host or isolated project to Podium CRM, with private disk encryption, backup policy and outbound TLS access.
 2. Build the repository on a trusted machine/CI runner and tag the private image. Do not give users access to the internal upstream GitHub repository or build metadata.
 3. Create an **uncommitted** application environment file readable only by the operator. Base it on `profiles/stratum-filter-crm.env.example`.
 4. Generate independent keys for: the 32-byte `WA_AUTH_ENCRYPTION_KEY` (base64/hex), three distinct long advanced-API role tokens, and a **separate shared** 32+ character HMAC integration secret.
-5. Provision the same HMAC secret once in STRATUM CRM production as `FILTER_CRM_WEBHOOK_SECRET` and in Filter CRM as `FILTER_STRATUM_CRM_SECRET`; keep values only in provider secret managers. Never paste them into issues, pull requests or application logs.
+5. Provision the same HMAC secret once in STRATUM CRM production as `FILTER_CRM_WEBHOOK_SECRET` and in Podium CRM as `FILTER_STRATUM_CRM_SECRET`; keep values only in provider secret managers. Never paste them into issues, pull requests or application logs.
 6. Confirm the Vercel production deployment was rebuilt/redeployed **after** adding the secret. Simply writing a new env var does not retroactively change an already running serverless deployment.
 7. Pair a **dedicated authorized** WhatsApp account and approve actual `WA_ALLOWED_GROUP_JIDS`, `WA_ALLOWED_SENDER_JIDS` if used, and exact `FILTER_REVIEWER_JIDS`.
 8. For the initial pilot keep `FEATURE_LEAD_CRM=false`, `FEATURE_FILTER_CRM=true`, `FEATURE_ADVANCED_API=true`, `FEATURE_AI_EXTRACTION=false`, and `FILTER_STRATUM_AUTO_DISPATCH=false`.
-9. Restrict access to Filter CRM's advanced API and dashboard to loopback/private network, never an unauthenticated public port.
+9. Restrict access to Podium CRM's advanced API and dashboard to loopback/private network, never an unauthenticated public port.
 10. Document explicit group participant consent, retention of sensitive lead messages, and WhatsApp automation/account-policy risks.
 
 ## Preflight without sending data
@@ -61,7 +61,7 @@ The preflight checks whether the configuration is ready for pairing/test; it doe
 | Gate | Expected result |
 | --- | --- |
 | Vercel receiver deployment | Correct commit `READY`; secret configured for production |
-| Filter CRM container | Running continuously with a vendor-private persistent `/data` volume |
+| Podium CRM container | Running continuously with a vendor-private persistent `/data` volume |
 | WhatsApp pairing | Dedicated account connected; session survives restart |
 | Group control | Non-allowlisted groups/senders ignored; only authorized group data indexed |
 | Ordinary conversation | Messages with no lead cues trigger no bot reply |
@@ -72,7 +72,7 @@ The preflight checks whether the configuration is ready for pairing/test; it doe
 | HMAC webhook | Approved lead receives `201 created` with source ID; forged/stale request receives `401` |
 | Idempotency | Repeat same source ID returns `already_imported`, not a second contact |
 | Existing CRM collision | Potential same email/phone returns `needs_review_existing`, no destructive change |
-| No leakage | Unrelated and unresolved leads remain exclusively in Filter CRM |
+| No leakage | Unrelated and unresolved leads remain exclusively in Podium CRM |
 | Failure recovery | Failed transfer retained for review/retry, not silently dropped |
 | Logs/audit | No secrets, raw media or sensitive auth values printed |
 

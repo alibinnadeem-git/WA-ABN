@@ -163,7 +163,7 @@ export async function handlePlatformCommand(input: CommandInput): Promise<boolea
           "Usage: !lead Full Name | Company | Email | Phone | Notes\\nLeave email or phone blank, but not both.\\n" + message);
         return true;
       }
-      // Stage every WhatsApp lead in Filter CRM before any Google Sheets operation.
+      // Stage every WhatsApp lead in Podium CRM before any Google Sheets operation.
       const filtered = stageFilterLead({
         name: lead.name, company: lead.company, email: lead.email, phone: lead.phone,
         notes: lead.notes, sourceMessageId: input.message.key.id ?? undefined,
@@ -171,7 +171,7 @@ export async function handlePlatformCommand(input: CommandInput): Promise<boolea
       }, "WhatsApp manual capture");
       if (!config.features.leadCrm) {
         await reply(input.sock, input.jid, input.message,
-          `Filter CRM: ${lead.name} at ${lead.company} recorded.\\nClassification: ${filtered?.disposition ?? "not enabled"}\\nLead ID: ${filtered?.id ?? "unknown"}\\nPending reviewer decision; nothing sent to STRATUM CRM.`);
+          `Podium CRM: ${lead.name} at ${lead.company} recorded.\\nClassification: ${filtered?.disposition ?? "not enabled"}\\nLead ID: ${filtered?.id ?? "unknown"}\\nPending reviewer decision; nothing sent to STRATUM CRM.`);
         return true;
       }
       const event = currentLeadEvent();

@@ -23,10 +23,24 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
+      - name: Reject Dockerfile VOLUME on Railway
+        run: |
+          if grep -nE '^[[:space:]]*VOLUME([[:space:]]|$)' Dockerfile; then
+            echo 'Do not declare Docker VOLUME; configure persistent storage through Railway or Compose mounts.' >&2
+            exit 1
+          fi
       - name: Validate vendor Compose syntax
         run: |
           echo DATA_DIR=/data > "$RUNNER_TEMP/filter-crm-test.env"
           VENDOR_IMAGE=filter-crm-ci:smoke VENDOR_ENV_FILE="$RUNNER_TEMP/filter-crm-test.env" docker compose -f deploy/vendor.compose.yml config --quiet
+      - name: Build production container image
+        run: docker build --file Dockerfile --tag podium-crm-ci:test .
+      - name: Smoke-test durable volume with non-root worker
+        run: |
+          docker volume create podium-crm-ci-data
+          trap 'docker volume rm podium-crm-ci-data' EXIT
+          docker run --rm --user 0:0 -v podium-crm-ci-data:/data podium-crm-ci:test node --input-type=module -e 'import fs from "node:fs"; console.log("worker uid", process.getuid()); if (process.getuid() === 0) throw Error("worker must not run as root"); fs.writeFileSync("/data/.ci-probe", "persisted")'
+          docker run --rm --user 0:0 -v podium-crm-ci-data:/data podium-crm-ci:test node --input-type=module -e 'import fs from "node:fs"; console.log("worker uid", process.getuid()); if (fs.readFileSync("/data/.ci-probe", "utf8") !== "persisted") throw Error("volume did not persist")'
       - run: npm audit --audit-level=high
 
   semgrep:

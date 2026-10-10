@@ -56,7 +56,7 @@ function openapi(): Json {
       ["GET /v1/groups", "Permitted WhatsApp groups"],
       ["GET /v1/campaigns", "Campaign status"],
       ["GET /v1/events/recent", "Recent vendor-local events"],
-      ["GET /v1/filter/leads", "Admin: inspect classified Filter CRM leads"],
+      ["GET /v1/filter/leads", "Admin: inspect classified Podium CRM leads"],
       ["POST /v1/filter/leads/{id}/decision", "Admin: approve/reject/review classification"],
       ["POST /v1/filter/leads/{id}/dispatch", "Admin: send approved lead to STRATUM CRM"],
       ["POST /v1/filter/dispatch-approved", "Admin: dispatch approved batch only when filtering is complete"],
@@ -175,7 +175,7 @@ export function startAdvancedApi(socket: () => WASocket | null): void {
       if (req.method === "GET" && url.pathname === "/v1/filter/leads") {
         requireRole("admin"); // Lead data is more sensitive than generic runtime stats.
         const queue = filterCrmQueue();
-        if (!queue) { reply(res, 404, { error: "Filter CRM disabled" }); return; }
+        if (!queue) { reply(res, 404, { error: "Podium CRM disabled" }); return; }
         const allowed = ["STRATUM_RELATED", "UNRELATED", "NEEDS_REVIEW"];
         const selected = url.searchParams.get("disposition");
         if (selected && !allowed.includes(selected)) throw new Error("Invalid disposition filter");
@@ -209,7 +209,7 @@ export function startAdvancedApi(socket: () => WASocket | null): void {
       if (url.pathname === "/v1/filter/dispatch-approved") {
         requireRole("admin");
         const queue = filterCrmQueue();
-        if (!queue) { reply(res, 404, { error: "Filter CRM disabled" }); return; }
+        if (!queue) { reply(res, 404, { error: "Podium CRM disabled" }); return; }
         if (body.confirm !== "DISPATCH_FILTERED_LEADS") throw new Error("Batch confirmation required");
         const staged = queue.list();
         const unreviewed = staged.filter((lead) =>
@@ -234,7 +234,7 @@ export function startAdvancedApi(socket: () => WASocket | null): void {
       if (filterAction) {
         requireRole("admin");
         const queue = filterCrmQueue();
-        if (!queue) { reply(res, 404, { error: "Filter CRM disabled" }); return; }
+        if (!queue) { reply(res, 404, { error: "Podium CRM disabled" }); return; }
         const id = filterAction[1];
         if (filterAction[2] === "decision") {
           const reviewer = value(body.reviewer, "reviewer", 150);

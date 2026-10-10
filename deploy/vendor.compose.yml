@@ -10,7 +10,8 @@ services:
       - ${VENDOR_ENV_FILE:?Set a vendor-specific absolute path to its application.env}
     restart: unless-stopped
     read_only: true
-    user: node
+    # The volume is root-owned; entrypoint chowns it and drops to node immediately.
+    user: "0:0"
     cap_drop:
       - ALL
     security_opt:

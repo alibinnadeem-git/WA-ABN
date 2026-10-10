@@ -1,31 +1,31 @@
-# Filter CRM → existing STRATUM CRM
+# Podium CRM → existing STRATUM CRM
 
-**Filter CRM is its own application.** STRATUM CRM (the separate private `alibinnadeem-git/StratumCRM` Next.js/Neon system) remains the **only authoritative STRATUM CRM database**. Do not create another STRATUM database, and do not send all captured leads to STRATUM by default.
+**Podium CRM is its own application.** STRATUM CRM (the separate private `alibinnadeem-git/StratumCRM` Next.js/Neon system) remains the **only authoritative STRATUM CRM database**. Do not create another STRATUM database, and do not send all captured leads to STRATUM by default.
 
 ## Data flow
 
-WhatsApp → Filter CRM local staging queue → rule-based classification (STRATUM_RELATED, UNRELATED, NEEDS_REVIEW) → human review → secure HMAC-signed webhook → existing STRATUM CRM `CONTACT` record.
+WhatsApp → Podium CRM local staging queue → rule-based classification (STRATUM_RELATED, UNRELATED, NEEDS_REVIEW) → human review → secure HMAC-signed webhook → existing STRATUM CRM `CONTACT` record.
 
 - **STRATUM_RELATED** means a qualified *candidate*, not an approved send. The source text must contain demonstrable electrical/power/data-center project evidence. `score` is a rules-confidence indicator, not a prediction of commercial fit.
-- **UNRELATED** stays in Filter CRM; no STRATUM data transfer.
-- **NEEDS_REVIEW** stays in Filter CRM. No automatic promotion or transfer.
+- **UNRELATED** stays in Podium CRM; no STRATUM data transfer.
+- **NEEDS_REVIEW** stays in Podium CRM. No automatic promotion or transfer.
 - All related candidates must be **explicitly approved** by an administrator with a reason. Missing email and phone can be staged for review but cannot be approved for transfer.
 - After approval, signed single dispatch or reviewed-batch dispatch is allowed. Batch dispatch is blocked if there is any unresolved classification or unapproved relevant candidate.
 - The STRATUM CRM receiver either creates a new CONTACT, acknowledges an existing source ID, or marks a potential existing contact as `needs_review_existing` without modifying it.
 
 ## Separate systems / credentials
 
-Filter CRM: `TENANT_ID=filter-crm`, private `DATA_DIR`, its own WhatsApp number/auth key, its own admin API tokens, no Google Sheets required, private persistent `filter-leads.json`. It is NOT co-located or database-linked to STRATUM CRM.
+Podium CRM: `TENANT_ID=filter-crm`, private `DATA_DIR`, its own WhatsApp number/auth key, its own admin API tokens, no Google Sheets required, private persistent `filter-leads.json`. It is NOT co-located or database-linked to STRATUM CRM.
 
-STRATUM CRM: keeps its **current Neon production database**; its own deployment and secrets. The only new route is `POST /api/integrations/filter-crm/leads`. Filter CRM never receives Neon credentials.
+STRATUM CRM: keeps its **current Neon production database**; its own deployment and secrets. The only new route is `POST /api/integrations/filter-crm/leads`. Podium CRM never receives Neon credentials.
 
-**This is a single STRATUM destination module, not cross-vendor sharing.** Other vendors must have independent deployments and credentials. Do not publish the Filter CRM approval API on the open Internet; it binds to loopback and should be accessed by private network/SSH tunnel.
+**This is a single STRATUM destination module, not cross-vendor sharing.** Other vendors must have independent deployments and credentials. Do not publish the Podium CRM approval API on the open Internet; it binds to loopback and should be accessed by private network/SSH tunnel.
 
 ## Configure safely
 
 1. Copy `profiles/stratum-filter-crm.env.example` to a **private** deployment configuration. Fill unique `WA_AUTH_ENCRYPTION_KEY`, `ADVANCED_VIEW_TOKEN`, `ADVANCED_OPERATOR_TOKEN`, `ADVANCED_ADMIN_TOKEN`, authorized group/sender JIDs, and storage path.
 2. Keep `FEATURE_LEAD_CRM=false` and `FEATURE_FILTER_CRM=true` for standalone staging. You do not need Google Sheets. Set `FEATURE_AI_EXTRACTION=false` initially (manual `!lead`), or enable to capture photos, vCards and explicit `!capture ...` using an **authorized** AI key (possible provider charges).
-3. Generate one shared integration secret (minimum 32 characters; e.g. `openssl rand -base64 48`). Store it privately as `FILTER_STRATUM_CRM_SECRET` in Filter CRM and `FILTER_CRM_WEBHOOK_SECRET` in the STRATUM CRM application.
+3. Generate one shared integration secret (minimum 32 characters; e.g. `openssl rand -base64 48`). Store it privately as `FILTER_STRATUM_CRM_SECRET` in Podium CRM and `FILTER_CRM_WEBHOOK_SECRET` in the STRATUM CRM application.
 4. Configure `FILTER_STRATUM_CRM_ENDPOINT=https://stratum-electric-crm.vercel.app/api/integrations/filter-crm/leads` and `FILTER_STRATUM_CRM_ALLOWED_HOST=stratum-electric-crm.vercel.app`. The URL uses HTTPS and exact host/path validation.
 5. Start with `FILTER_STRATUM_AUTO_DISPATCH=false` and use explicit dispatch after review. If enabled later, **review approval** triggers signed delivery; unapproved records still never send.
 
@@ -33,7 +33,7 @@ Never put secrets or real leads in this repository, issue, PR, build log or supp
 
 ## REST endpoints
 
-The private Filter CRM advanced API uses `Authorization: Bearer <ADVANCED_ADMIN_TOKEN>` for all filter routes:
+The private Podium CRM advanced API uses `Authorization: Bearer <ADVANCED_ADMIN_TOKEN>` for all filter routes:
 
 | Method/path | Action |
 |---|---|

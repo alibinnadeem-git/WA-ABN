@@ -26,14 +26,14 @@ export interface FilterOptions {
   fetchFn?: typeof fetch;
 }
 
-/** Filter CRM owns staging. Only reviewer-approved STRATUM leads can leave it. */
+/** Podium CRM owns staging. Only reviewer-approved STRATUM leads can leave it. */
 export class FilterQueue {
   private entries: FilterEntry[] = [];
   private inFlight = new Set<string>();
   constructor(private readonly store: string, private readonly options: FilterOptions) {
     if (existsSync(store)) {
       const parsed: unknown = JSON.parse(readFileSync(store, "utf8"));
-      if (!Array.isArray(parsed)) throw new Error("Invalid Filter CRM queue");
+      if (!Array.isArray(parsed)) throw new Error("Invalid Podium CRM queue");
       this.entries = parsed as FilterEntry[];
       for (const item of this.entries) {
         if (item.delivery === "sending") item.delivery = "failed"; // ambiguous ACK: retry safe via externalKey
