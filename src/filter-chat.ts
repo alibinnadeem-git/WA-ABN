@@ -41,12 +41,12 @@ export async function handleFilterChat(turn: FilterChatTurn): Promise<boolean> {
   };
 
   if (cmd === "!filter") {
-    await respond("*Filter CRM in WhatsApp*\nDrop a business card/contact with context, or use !lead Name | Company | Email | Phone | Notes.\n!leads — leads from this group\n!ask Name | question — ask about a lead\nReply to a lead message with !ask | question\nFilter: what do we know about Jane? — natural question\n!sources — source attachments in this group\n!source <ID> — recorded file/source\nReviewer-only: !review <ID> related|unrelated|review | reason; !dispatch <ID>; !sendapproved\nNo lead is sent to STRATUM CRM without explicit approval.");
+    await respond("*Podium CRM in WhatsApp*\nDrop a business card/contact with context, or use !lead Name | Company | Email | Phone | Notes.\n!leads — leads from this group\n!ask Name | question — ask about a lead\nReply to a lead message with !ask | question\nFilter: what do we know about Jane? — natural question\n!sources — source attachments in this group\n!source <ID> — recorded file/source\nReviewer-only: !review <ID> related|unrelated|review | reason; !dispatch <ID>; !sendapproved\nNo lead is sent to STRATUM CRM without explicit approval.");
     return true;
   }
   if (cmd === "!leads") {
     const latest = entries.slice(-10).reverse();
-    await respond(latest.length ? "*Filter CRM — this group*\n" + latest.map(conciseLead).join("\n").slice(0,3500) : "No Filter CRM leads captured in this WhatsApp group yet.");
+    await respond(latest.length ? "*Podium CRM — this group*\n" + latest.map(conciseLead).join("\n").slice(0,3500) : "No Podium CRM leads captured in this WhatsApp group yet.");
     return true;
   }
   if (cmd === "!sources") {
@@ -66,7 +66,7 @@ export async function handleFilterChat(turn: FilterChatTurn): Promise<boolean> {
   if (cmd === "!review" || cmd === "!dispatch" || cmd === "!sendapproved") {
     // No reviewer configured = fail closed. Group membership alone is not admin authority.
     if (!config.filterReviewerJids.has(turn.senderJid)) {
-      await respond("Not authorized. Only an explicitly configured Filter CRM reviewer can approve or transfer records.");
+      await respond("Not authorized. Only an explicitly configured Podium CRM reviewer can approve or transfer records.");
       audit("filtercrm.whatsapp_reviewer_denied", { sender: turn.senderJid, group: turn.groupJid });
       return true;
     }
