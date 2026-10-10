@@ -25,9 +25,8 @@ jobs:
       - run: npm test
       - name: Validate vendor Compose syntax
         run: |
-          printf 'DATA_DIR=/data\\n' > "$RUNNER_TEMP/filter-crm-test.env"
-          VENDOR_IMAGE=filter-crm-ci:smoke VENDOR_ENV_FILE="$RUNNER_TEMP/filter-crm-test.env" \\
-            docker compose -f deploy/vendor.compose.yml config --quiet
+          echo DATA_DIR=/data > "$RUNNER_TEMP/filter-crm-test.env"
+          VENDOR_IMAGE=filter-crm-ci:smoke VENDOR_ENV_FILE="$RUNNER_TEMP/filter-crm-test.env" docker compose -f deploy/vendor.compose.yml config --quiet
       - run: npm audit --audit-level=high
 
   semgrep:
