@@ -12,6 +12,7 @@ import { parseManualLead } from "./manual-lead.js";
 import { currentLeadEvent } from "./leads.js";
 import { appendLead, appendNoteToRow, findDuplicate } from "./sheets.js";
 import { emitIntegrationEvent } from "./integrations.js";
+import { stageFilterLead } from "./filter-runtime.js";
 import { increment } from "./ops.js";
 
 export interface CommandInput {
@@ -160,6 +161,11 @@ export async function handlePlatformCommand(input: CommandInput): Promise<boolea
           "Usage: !lead Full Name | Company | Email | Phone | Notes\\nLeave email or phone blank, but not both.\\n" + message);
         return true;
       }
+      // Stage every WhatsApp lead in Filter CRM before any Google Sheets operation.
+      const filtered = stageFilterLead({
+        name: lead.name, company: lead.company, email: lead.email, phone: lead.phone,
+        notes: lead.notes, sourceMessageId: input.message.key.id ?? undefined,
+      }, "WhatsApp manual capture");
       const event = currentLeadEvent();
       const dup = await findDuplicate(lead.email ? [lead.email] : [], lead.phone ? [lead.phone] : []);
       if (dup) {
