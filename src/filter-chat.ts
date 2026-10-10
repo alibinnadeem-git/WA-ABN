@@ -31,14 +31,15 @@ export async function handleFilterChat(turn: FilterChatTurn): Promise<boolean> {
   const arg = parts.join(" ").trim();
   const addressed = parseConversationalQuestion(raw);
   const supported = ["!filter", "!leads", "!ask", "!review", "!dispatch", "!sendapproved", "!sources", "!source"];
+  const entries = groupLeads(queue.list(), turn.groupJid);
+  const hasQuotedLead = Boolean(turn.quotedMessageId && findLead(entries, turn.groupJid, "", turn.quotedMessageId).match);
   // A short question replying to a lead-source WhatsApp message is also an explicit request.
-  const quotedQuestion = Boolean(turn.quotedMessageId &&
+  const quotedQuestion = Boolean(hasQuotedLead &&
     /^(?:what|who|why|where|when|how|is|was|has|did|can|does|which)\\b/i.test(raw) && raw.endsWith("?"));
   if (!supported.includes(cmd) && addressed === null && !quotedQuestion) return false;
   const respond = async (message: string): Promise<void> => {
     await turn.sock.sendMessage(turn.groupJid, { text: message }, { quoted: turn.message });
   };
-  const entries = groupLeads(queue.list(), turn.groupJid);
 
   if (cmd === "!filter") {
     await respond("*Filter CRM in WhatsApp*\nDrop a business card/contact with context, or use !lead Name | Company | Email | Phone | Notes.\n!leads — leads from this group\n!ask Name | question — ask about a lead\nReply to a lead message with !ask | question\nFilter: what do we know about Jane? — natural question\n!sources — source attachments in this group\n!source <ID> — recorded file/source\nReviewer-only: !review <ID> related|unrelated|review | reason; !dispatch <ID>; !sendapproved\nNo lead is sent to STRATUM CRM without explicit approval.");
