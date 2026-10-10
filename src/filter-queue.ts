@@ -58,7 +58,7 @@ export class FilterQueue {
       || (lead.phone ?? "").length > 40) throw new Error("Filter lead exceeds field limits");
     const sourceMessageId = lead.sourceMessageId;
     if (sourceMessageId) {
-      const previous = this.entries.find((e) => e.lead.sourceMessageId === sourceMessageId);
+      const previous = this.entries.find((e) => e.lead.sourceMessageId === sourceMessageId && e.lead.sourceGroupJid === lead.sourceGroupJid);
       if (previous) return previous;
     }
     const classification = classifyStratumLead(lead);
@@ -71,7 +71,7 @@ export class FilterQueue {
     }
     const item: FilterEntry = {
       id: randomUUID(),
-      lead: { name: lead.name.trim(), company: (lead.company ?? "").trim(), email: lead.email.trim().toLowerCase(), phone: lead.phone.trim(), notes: lead.notes.slice(0, 3000), sourceMessageId: lead.sourceMessageId, capturedAt: lead.capturedAt ?? new Date().toISOString() },
+      lead: { name: lead.name.trim(), company: (lead.company ?? "").trim(), email: lead.email.trim().toLowerCase(), phone: lead.phone.trim(), notes: lead.notes.slice(0, 3000), sourceMessageId: lead.sourceMessageId, sourceGroupJid: lead.sourceGroupJid, sourceSenderJid: lead.sourceSenderJid, capturedAt: lead.capturedAt ?? new Date().toISOString() },
       source, ...classification,
       createdAt: new Date().toISOString(),
       delivery: classification.disposition === "UNRELATED" ? "not_eligible" : "awaiting_review",
