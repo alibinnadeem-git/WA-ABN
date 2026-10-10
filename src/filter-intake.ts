@@ -1,6 +1,6 @@
 import { extractLeads, type MessageInput } from "./ai.js";
 import { config } from "./config.js";
-import { stageFilterLead } from "./filter-runtime.js";
+import { stageFilterLead, filterSourceRegistry } from "./filter-runtime.js";
 
 /** Optional AI intake ONLY for explicit captures, images and vCards. */
 export async function handleFilterOnlyIntake(
