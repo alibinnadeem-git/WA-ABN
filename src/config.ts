@@ -142,6 +142,8 @@ export const config = {
 
   // Filter CRM staging and reviewed STRATUM delivery. All values scoped to tenant.
   filterQueuePath: path.join(sessionDir, "filter-leads.json"),
+  filterSourcesPath: path.join(sessionDir, "filter-sources.json"),
+  filterReviewerJids: csv("FILTER_REVIEWER_JIDS"),
   filterCrmEndpoint: optional("FILTER_STRATUM_CRM_ENDPOINT"),
   filterCrmAllowedHost: optional("FILTER_STRATUM_CRM_ALLOWED_HOST"),
   filterCrmWebhookSecret: optional("FILTER_STRATUM_CRM_SECRET"),
