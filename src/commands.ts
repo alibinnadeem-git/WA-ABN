@@ -40,7 +40,8 @@ function helpText(): string {
   if (config.features.pipeline && config.features.leadCrm) commands.push("*!pipeline* — pipeline summary", "*!assign <row> <owner>* — assign lead", "*!stage <row> <stage>* — update pipeline stage", "*!followup <row> <2d> [note]* — set follow-up + reminder");
   if (config.features.backups) commands.push("*!backup* — create encrypted-state/config data backup", "*!backups* — list backups");
   if (config.features.retryQueue) commands.push("*!retries* — list failed work", "*!retry-resolve <id>* — mark retry item resolved");
-  if (config.features.leadCrm) commands.push("*!event <name>* / *!event off* — CRM event tagging", "*!lead Name | Company | Email | Phone | Notes* — capture a lead without AI");
+  if (config.features.leadCrm) commands.push("*!event <name>* / *!event off* — CRM event tagging");
+  if (config.features.leadCrm || config.features.filterCrm) commands.push("*!lead Name | Company | Email | Phone | Notes* — capture a lead without AI");
   return `*${config.botDisplayName}*\n${config.appDescription}\n\n${commands.join("\n")}`;
 }
 
@@ -151,7 +152,7 @@ export async function handlePlatformCommand(input: CommandInput): Promise<boolea
     }
 
     case "lead": {
-      if (!config.features.leadCrm) return false;
+      if (!config.features.leadCrm && !config.features.filterCrm) return false;
       let lead;
       try {
         lead = parseManualLead(arg);
@@ -166,6 +167,11 @@ export async function handlePlatformCommand(input: CommandInput): Promise<boolea
         name: lead.name, company: lead.company, email: lead.email, phone: lead.phone,
         notes: lead.notes, sourceMessageId: input.message.key.id ?? undefined,
       }, "WhatsApp manual capture");
+      if (!config.features.leadCrm) {
+        await reply(input.sock, input.jid, input.message,
+          `Filter CRM: ${lead.name} at ${lead.company} recorded.\\nClassification: ${filtered?.disposition ?? "not enabled"}\\nLead ID: ${filtered?.id ?? "unknown"}\\nPending reviewer decision; nothing sent to STRATUM CRM.`);
+        return true;
+      }
       const event = currentLeadEvent();
       const dup = await findDuplicate(lead.email ? [lead.email] : [], lead.phone ? [lead.phone] : []);
       if (dup) {
