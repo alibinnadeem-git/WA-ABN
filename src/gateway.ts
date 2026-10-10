@@ -59,6 +59,7 @@ function openapi(): Json {
       ["GET /v1/filter/leads", "Admin: inspect classified Filter CRM leads"],
       ["POST /v1/filter/leads/{id}/decision", "Admin: approve/reject/review classification"],
       ["POST /v1/filter/leads/{id}/dispatch", "Admin: send approved lead to STRATUM CRM"],
+      ["POST /v1/filter/dispatch-approved", "Admin: dispatch approved batch only when filtering is complete"],
       ["GET /v1/events/stream", "Authenticated server-sent event stream"],
       ["POST /v1/integrations/notify", "Authenticated workflow sends an approved notification"],
       ["POST /v1/integrations/events", "Authenticated workflow publishes a vendor-local event"],
@@ -205,6 +206,30 @@ export function startAdvancedApi(socket: () => WASocket | null): void {
       if (req.method !== "POST") { reply(res, 404, { error: "Not found" }); return; }
       const body = await readBody(req);
 
+      if (url.pathname === "/v1/filter/dispatch-approved") {
+        requireRole("admin");
+        const queue = filterCrmQueue();
+        if (!queue) { reply(res, 404, { error: "Filter CRM disabled" }); return; }
+        if (body.confirm !== "DISPATCH_FILTERED_LEADS") throw new Error("Batch confirmation required");
+        const staged = queue.list();
+        const unreviewed = staged.filter((lead) =>
+          lead.disposition === "NEEDS_REVIEW" ||
+          (lead.disposition === "STRATUM_RELATED" && !lead.approvedAt));
+        if (unreviewed.length) {
+          reply(res, 409, { error: "Filter review incomplete", remaining: unreviewed.length });
+          return;
+        }
+        const ready = staged.filter((lead) => ["approved", "failed"].includes(lead.delivery)).slice(0, 25);
+        const deliveries: Array<{ id: string; status: string }> = [];
+        for (const entry of ready) {
+          const outcome = await queue.dispatch(entry.id);
+          deliveries.push({ id: entry.id, status: outcome.delivery });
+        }
+        audit("filtercrm.approved_batch_dispatched", { dispatched: deliveries.length });
+        reply(res, 200, { processed: deliveries.length, remaining: Math.max(0, staged.filter((lead) =>
+          ["approved", "failed"].includes(lead.delivery)).length - ready.length), deliveries });
+        return;
+      }
       const filterAction = url.pathname.match(new RegExp("^/v1/filter/leads/([a-f0-9-]{36})/(decision|dispatch)$"));
       if (filterAction) {
         requireRole("admin");
