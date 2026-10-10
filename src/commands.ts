@@ -42,6 +42,7 @@ function helpText(): string {
   if (config.features.retryQueue) commands.push("*!retries* — list failed work", "*!retry-resolve <id>* — mark retry item resolved");
   if (config.features.leadCrm) commands.push("*!event <name>* / *!event off* — CRM event tagging");
   if (config.features.leadCrm || config.features.filterCrm) commands.push("*!lead Name | Company | Email | Phone | Notes* — capture a lead without AI");
+  if (config.features.filterCrm) commands.push("*!filter* — WhatsApp assistant help", "*!leads* — leads from this group", "*!ask Name | question* — evidence-grounded Q&A", "*!sources* / *!source ID* — attached sources");
   return `*${config.botDisplayName}*\n${config.appDescription}\n\n${commands.join("\n")}`;
 }
 
