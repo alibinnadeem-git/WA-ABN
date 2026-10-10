@@ -250,7 +250,7 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
     if (c.vcard) input.vcards.push(c.vcard);
   }
 
-  // Filter CRM observes approved group media without mistaking all chat/media for a lead.
+  // Podium CRM observes approved group media without mistaking all chat/media for a lead.
   // Unsupported binary formats get honest metadata-only status, not fake extracted facts.
   let sourceNotice: string | null = null;
   let sourceRecorded = false;
@@ -292,7 +292,7 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
               textFromDocument = extractedText;
             }
           } catch (error) {
-            console.error("Filter CRM document text extraction unavailable",
+            console.error("Podium CRM document text extraction unavailable",
               error instanceof Error ? error.name : "unknown");
           }
         }
@@ -307,8 +307,8 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
           input.text = "!capture " + extractedText;
         } else {
           sourceNotice = extractedText
-            ? "Filter CRM indexed text from this document. To capture a contact, use !lead Name | Company | Email | Phone | Notes."
-            : "Filter CRM recorded this file's metadata, but its contents need a supported document parser or manual review. Nothing was invented or sent to STRATUM CRM.";
+            ? "Podium CRM indexed text from this document. To capture a contact, use !lead Name | Company | Email | Phone | Notes."
+            : "Podium CRM recorded this file's metadata, but its contents need a supported document parser or manual review. Nothing was invented or sent to STRATUM CRM.";
         }
       }
       const video = content.videoMessage;
@@ -321,7 +321,7 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
           processing: "needs_extraction",
         });
         sourceRecorded = true;
-        sourceNotice = "Filter CRM registered this media source. Audio/video transcription or content extraction has not been enabled; it will not be treated as a verified lead.";
+        sourceNotice = "Podium CRM registered this media source. Audio/video transcription or content extraction has not been enabled; it will not be treated as a verified lead.";
       }
       if (input.text && /^(?:source:|!sourceadd\s)/i.test(input.text.trim())) {
         registry.record({
@@ -330,7 +330,7 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
           processing: "text_indexed", extractedText: input.text.trim(),
         });
         sourceRecorded = true;
-        sourceNotice = "Filter CRM recorded this source note. Ask about a lead with !ask Name | question, or capture one with !lead.";
+        sourceNotice = "Podium CRM recorded this source note. Ask about a lead with !ask Name | question, or capture one with !lead.";
       }
     }
   }
@@ -376,7 +376,7 @@ async function onMessage(sock: WASocket, m: WAMessage): Promise<void> {
       }, textFromDocument ? "WhatsApp text attachment" : "WhatsApp group lead mention");
       if (created) {
         await sock.sendMessage(jid, {
-          text: `Filter CRM captured a possible lead: ${created.lead.name}.\\nClassification: ${created.disposition}; ID: ${created.id}\\nPending review. Nothing has been sent to STRATUM CRM.\\nAsk: !ask ${created.id} | Why is this relevant?`,
+          text: `Podium CRM captured a possible lead: ${created.lead.name}.\\nClassification: ${created.disposition}; ID: ${created.id}\\nPending review. Nothing has been sent to STRATUM CRM.\\nAsk: !ask ${created.id} | Why is this relevant?`,
         }, { quoted: m });
         return;
       }
