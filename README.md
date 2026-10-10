@@ -317,13 +317,13 @@ The structured command is `!lead Full Name | Company | Email | Phone | Notes`. A
 
 Read [STRATUM launch gates and verification](docs/STRATUM_LAUNCH.md) before pairing a dedicated WhatsApp account or enabling external messaging. The pilot is **not live** until credentialed WhatsApp/Sheets UAT passes.
 
-## Filter CRM — WhatsApp-native conversation product
+## Podium CRM — WhatsApp-native conversation product
 
-**Filter CRM is a separate WA-ABN profile, not your existing STRATUM CRM and not a substitute for the STRATUM database.** People work within an authorized WhatsApp group. They can chat as normal, send lead/contact messages, vCards, business-card pictures, source notes and media, and ask Filter CRM questions in WhatsApp.
+**Podium CRM is a separate WA-ABN profile, not your existing STRATUM CRM and not a substitute for the STRATUM database.** People work within an authorized WhatsApp group. They can chat as normal, send lead/contact messages, vCards, business-card pictures, source notes and media, and ask Podium CRM questions in WhatsApp.
 
 The bot stages lead candidates privately, classifies them as STRATUM-related / unrelated / needs review, and answers `Filter: what do we know about Jane?`, `!ask Jane | why related?`, quoted-source questions, `!leads`, `!sources` and `!source <ID>` using only the evidence from the **same group**. Authorized reviewer JIDs may run `!review`, `!dispatch` or `!sendapproved`; no automatic send into STRATUM CRM occurs without review.
 
-Filter CRM requires no Google Sheet or second CRM database. The existing private STRATUM CRM accepts approved leads through a separate signed webhook with unique source IDs, idempotence and existing-contact reconciliation.
+Podium CRM requires no Google Sheet or second CRM database. The existing private STRATUM CRM accepts approved leads through a separate signed webhook with unique source IDs, idempotence and existing-contact reconciliation.
 
 Only plain-text attachments are indexed directly; PDFs/Office files, audio and video currently receive **source-metadata intake** and require additional parsers/transcription to answer content questions. AI image/vCard capture is optional with external provider costs. No live linked-device UAT is claimed.
 
