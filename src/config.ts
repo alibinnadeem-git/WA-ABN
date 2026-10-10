@@ -108,6 +108,7 @@ export const config = {
     apiMedia: bool("FEATURE_API_MEDIA", false),
     eventStream: bool("FEATURE_EVENT_STREAM", false),
     inboundWorkflows: bool("FEATURE_INBOUND_WORKFLOWS", false),
+    filterCrm: bool("FEATURE_FILTER_CRM", false),
   },
 
   // Optional read-only operations dashboard. Localhost by default.
@@ -138,6 +139,15 @@ export const config = {
   advancedPerDay: Number(process.env.ADVANCED_SEND_PER_DAY ?? 100),
   advancedCampaignIntervalMs: Number(process.env.ADVANCED_CAMPAIGN_INTERVAL_SECONDS ?? 20) * 1000,
   advancedCampaignPath: path.join(sessionDir, "campaigns.json"),
+
+  // Filter CRM staging and reviewed STRATUM delivery. All values scoped to tenant.
+  filterQueuePath: path.join(sessionDir, "filter-leads.json"),
+  filterSourcesPath: path.join(sessionDir, "filter-sources.json"),
+  filterReviewerJids: csv("FILTER_REVIEWER_JIDS"),
+  filterCrmEndpoint: optional("FILTER_STRATUM_CRM_ENDPOINT"),
+  filterCrmAllowedHost: optional("FILTER_STRATUM_CRM_ALLOWED_HOST"),
+  filterCrmWebhookSecret: optional("FILTER_STRATUM_CRM_SECRET"),
+  filterCrmAutoDispatch: bool("FILTER_STRATUM_AUTO_DISPATCH", false),
 
   // History/privacy
   historyMaxTextChars: Math.max(0, Math.min(20_000, Number(process.env.HISTORY_MAX_TEXT_CHARS ?? 2000))),
@@ -204,4 +214,11 @@ if (config.features.advancedApi) {
 }
 if ((config.features.campaigns || config.features.groupAdmin || config.features.apiMedia || config.features.eventStream || config.features.inboundWorkflows) && !config.features.advancedApi) {
   throw new Error("Advanced features require FEATURE_ADVANCED_API=true");
+}
+
+if (config.features.filterCrm && !config.features.advancedApi) {
+  throw new Error("Filter CRM reviewer API requires FEATURE_ADVANCED_API=true");
+}
+if (config.filterCrmAutoDispatch && !config.features.filterCrm) {
+  throw new Error("Auto dispatch requires Filter CRM");
 }

@@ -6,6 +6,7 @@ import { appendLead, appendNoteToRow, findDuplicate, rowLink } from "./sheets.js
 import { increment, setCurrentEvent, setPendingLeads } from "./ops.js";
 import { enqueueRetry } from "./retry.js";
 import { emitIntegrationEvent } from "./integrations.js";
+import { stageFilterLead } from "./filter-runtime.js";
 
 /** What the WhatsApp layer hands us for each group message. */
 export interface IncomingMessage {
@@ -177,11 +178,21 @@ async function processLeads(
 
   await chat.react(sourceMessageId, "⏳");
   const results = await Promise.all(
-    extraction.leads.map((lead) => saveLead(lead, teamNotes, event, addedBy, source).catch((err: unknown) => {
+    extraction.leads.map((lead, index) => {
+      stageFilterLead({
+        name: lead.full_name || lead.phones[0] || lead.emails[0] || "Unidentified contact",
+        company: lead.company || "",
+        email: lead.emails[0] || "",
+        phone: lead.phones[0] || "",
+        notes: [teamNotes, lead.other_details].filter(Boolean).join("\\n"),
+        sourceMessageId: sourceMessageId + ":" + index,
+      }, source);
+      return saveLead(lead, teamNotes, event, addedBy, source).catch((err: unknown) => {
       console.error("saveLead failed", err);
       if (config.features.retryQueue) enqueueRetry("lead.save", { lead, teamNotes, event, addedBy, source }, err);
       return `⚠️ ${describe(lead)}: saved nothing — ${err instanceof Error ? err.message : "unknown error"}`;
-    })),
+    });
+    }),
   );
   await chat.reply(results.join("\n\n"), sourceMessageId);
   await chat.react(sourceMessageId, results.some((r) => r.startsWith("⚠️")) ? "⚠️" : "✅");

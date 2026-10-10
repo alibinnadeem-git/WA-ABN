@@ -5,6 +5,8 @@ import { CampaignManager } from "./campaigns.js";
 import { config } from "./config.js";
 import { opsSnapshot } from "./ops.js";
 import { publishGatewayEvent, recentGatewayEvents, subscribeGatewayEvents } from "./gateway-events.js";
+import { filterCrmQueue } from "./filter-runtime.js";
+import type { FilterDisposition } from "./filter-classifier.js";
 import { authenticateRole, authorizedRecipient, hasRole, MessageQuota, type ApiRole } from "./gateway-policy.js";
 
 type Json = Record<string, unknown>;
@@ -54,6 +56,10 @@ function openapi(): Json {
       ["GET /v1/groups", "Permitted WhatsApp groups"],
       ["GET /v1/campaigns", "Campaign status"],
       ["GET /v1/events/recent", "Recent vendor-local events"],
+      ["GET /v1/filter/leads", "Admin: inspect classified Filter CRM leads"],
+      ["POST /v1/filter/leads/{id}/decision", "Admin: approve/reject/review classification"],
+      ["POST /v1/filter/leads/{id}/dispatch", "Admin: send approved lead to STRATUM CRM"],
+      ["POST /v1/filter/dispatch-approved", "Admin: dispatch approved batch only when filtering is complete"],
       ["GET /v1/events/stream", "Authenticated server-sent event stream"],
       ["POST /v1/integrations/notify", "Authenticated workflow sends an approved notification"],
       ["POST /v1/integrations/events", "Authenticated workflow publishes a vendor-local event"],
@@ -166,6 +172,25 @@ export function startAdvancedApi(socket: () => WASocket | null): void {
         res.on("close", () => { clearInterval(heartbeat); unsubscribe(); });
         return;
       }
+      if (req.method === "GET" && url.pathname === "/v1/filter/leads") {
+        requireRole("admin"); // Lead data is more sensitive than generic runtime stats.
+        const queue = filterCrmQueue();
+        if (!queue) { reply(res, 404, { error: "Filter CRM disabled" }); return; }
+        const allowed = ["STRATUM_RELATED", "UNRELATED", "NEEDS_REVIEW"];
+        const selected = url.searchParams.get("disposition");
+        if (selected && !allowed.includes(selected)) throw new Error("Invalid disposition filter");
+        const entries = queue.list();
+        reply(res, 200, {
+          counts: {
+            stratumRelated: entries.filter((e) => e.disposition === "STRATUM_RELATED").length,
+            unrelated: entries.filter((e) => e.disposition === "UNRELATED").length,
+            needsReview: entries.filter((e) => e.disposition === "NEEDS_REVIEW").length,
+            delivered: entries.filter((e) => e.delivery === "delivered").length,
+          },
+          leads: entries.filter((e) => !selected || e.disposition === selected).slice(-200),
+        });
+        return;
+      }
       if (req.method === "GET" && url.pathname === "/v1/groups") {
         const groups = await Promise.all([...config.allowedGroupJids].map(async (jid) => {
           const meta = await socket()?.groupMetadata(jid).catch(() => null);
@@ -180,6 +205,55 @@ export function startAdvancedApi(socket: () => WASocket | null): void {
       }
       if (req.method !== "POST") { reply(res, 404, { error: "Not found" }); return; }
       const body = await readBody(req);
+
+      if (url.pathname === "/v1/filter/dispatch-approved") {
+        requireRole("admin");
+        const queue = filterCrmQueue();
+        if (!queue) { reply(res, 404, { error: "Filter CRM disabled" }); return; }
+        if (body.confirm !== "DISPATCH_FILTERED_LEADS") throw new Error("Batch confirmation required");
+        const staged = queue.list();
+        const unreviewed = staged.filter((lead) =>
+          lead.disposition === "NEEDS_REVIEW" ||
+          (lead.disposition === "STRATUM_RELATED" && !lead.approvedAt));
+        if (unreviewed.length) {
+          reply(res, 409, { error: "Filter review incomplete", remaining: unreviewed.length });
+          return;
+        }
+        const ready = staged.filter((lead) => ["approved", "failed"].includes(lead.delivery)).slice(0, 25);
+        const deliveries: Array<{ id: string; status: string }> = [];
+        for (const entry of ready) {
+          const outcome = await queue.dispatch(entry.id);
+          deliveries.push({ id: entry.id, status: outcome.delivery });
+        }
+        audit("filtercrm.approved_batch_dispatched", { dispatched: deliveries.length });
+        reply(res, 200, { processed: deliveries.length, remaining: Math.max(0, staged.filter((lead) =>
+          ["approved", "failed"].includes(lead.delivery)).length - ready.length), deliveries });
+        return;
+      }
+      const filterAction = url.pathname.match(new RegExp("^/v1/filter/leads/([a-f0-9-]{36})/(decision|dispatch)$"));
+      if (filterAction) {
+        requireRole("admin");
+        const queue = filterCrmQueue();
+        if (!queue) { reply(res, 404, { error: "Filter CRM disabled" }); return; }
+        const id = filterAction[1];
+        if (filterAction[2] === "decision") {
+          const reviewer = value(body.reviewer, "reviewer", 150);
+          const note = value(body.note, "note", 500);
+          const disposition = value(body.disposition, "disposition", 50) as FilterDisposition;
+          const reviewed = queue.decide(id, reviewer, disposition, note);
+          audit("filtercrm.reviewed", { leadId: id, disposition, reviewer });
+          publishGatewayEvent("filtercrm.reviewed", { id, disposition });
+          const result = disposition === "STRATUM_RELATED" && config.filterCrmAutoDispatch
+            ? await queue.dispatch(id) : reviewed;
+          reply(res, 200, result);
+          return;
+        }
+        const result = await queue.dispatch(id);
+        audit("filtercrm.dispatch", { leadId: id, status: result.delivery });
+        publishGatewayEvent("filtercrm.dispatched", { id, status: result.delivery });
+        reply(res, result.delivery === "failed" ? 502 : 200, result);
+        return;
+      }
 
       if (url.pathname === "/v1/integrations/events") {
         requireRole("operator");
