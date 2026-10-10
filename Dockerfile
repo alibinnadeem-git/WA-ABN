@@ -18,7 +18,10 @@ COPY --chown=node:node package.json ./
 # Persistent /data is configured as a Railway volume or Docker Compose mount.
 # Railway rejects the Dockerfile VOLUME instruction; never declare it here.
 COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/podium-entrypoint
-# Default to non-root; on root-owned Railway volumes RAILWAY_RUN_UID=0 is set to allow\n# only the entrypoint to chown the mount, then it immediately drops to node.\nUSER node\nENTRYPOINT ["/usr/local/bin/podium-entrypoint"]
+# Default to non-root; on root-owned Railway volumes RAILWAY_RUN_UID=0 is set to allow
+# only the entrypoint to chown the mount, then it immediately drops to node.
+USER node
+ENTRYPOINT ["/usr/local/bin/podium-entrypoint"]
 # Explicit non-root default applies to both ENTRYPOINT and CMD (CI policy checks both).
 USER node
 CMD ["node", "dist/index.js"]
