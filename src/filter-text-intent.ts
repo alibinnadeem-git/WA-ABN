@@ -4,7 +4,7 @@ import type { FilterLeadInput } from "./filter-classifier.js";
 const CONTEXT_CUE = /\b(?:lead|prospect|met|contact|referral|referred|business card|potential client|sales opportunity|procurement contact)\b/i;
 const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
 const PHONE = /(?:\+?\d[\d ()-]{8,}\d)/;
-const NAME = /\b(?:name|contact|lead|prospect|met)\s*(?::|=|is)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})(?=[,;\n.]|\s+(?:at|from|with|of)\s+|$)/i;
+const NAME = /\b(?:name|contact|lead|prospect|met)\s*(?::|=|is)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})(?=[,;\n.]|\s+(?:at|from|with|of|yesterday|today|recently)\s+|$)/i;
 const COMPANY = /\b(?:company|firm|employer|organization)\s*(?::|=|is)\s*([^;,\n.]{2,100})/i;
 
 export function passiveLeadFromText(raw: string): FilterLeadInput | null {
