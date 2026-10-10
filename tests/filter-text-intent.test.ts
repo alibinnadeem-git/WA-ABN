@@ -19,3 +19,11 @@ test("Missing person stays unresolved rather than fabricating identity",()=>{
  const lead=passiveLeadFromText("Lead at expo: email sales@example.com, looking for electrical contractor");
  assert.equal(lead?.name,"Unidentified contact");
 });
+
+test("Named company lead without email/phone is retained as review-only",()=>{
+ const lead = passiveLeadFromText("Met Jane Smith yesterday. Company: Example Electrical; need transformer upgrade.");
+ assert.equal(lead?.name,"Jane Smith");
+ assert.equal(lead?.company,"Example Electrical");
+ assert.equal(lead?.email,"");
+ assert.equal(lead?.phone,"");
+});
